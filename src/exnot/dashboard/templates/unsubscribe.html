@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}Unsubscribe{% endblock %}
+
+{% block header %}
+<header class="bg-white shadow-sm">
+    <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+        <h1 class="text-3xl font-bold tracking-tight text-slate-900">Unsubscribe</h1>
+    </div>
+</header>
+{% endblock %}
+
+{% block content %}
+<div class="flex min-h-[40vh] items-start justify-center pt-12">
+    <div class="w-full max-w-md">
+        {% if message %}
+        <div class="rounded-lg bg-green-50 border border-green-200 p-6 text-center">
+            <svg class="mx-auto h-12 w-12 text-green-400 mb-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <p class="text-sm font-medium text-green-800">{{ message }}</p>
+        </div>
+        {% elif error %}
+        <div class="rounded-lg bg-red-50 border border-red-200 p-6 text-center">
+            <svg class="mx-auto h-12 w-12 text-red-400 mb-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+            </svg>
+            <p class="text-sm font-medium text-red-800">{{ error }}</p>
+        </div>
+        {% else %}
+        <div class="rounded-lg bg-white shadow-sm border border-slate-200 p-6 text-center">
+            <svg class="mx-auto h-12 w-12 text-slate-300 mb-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M21.75 9v.906a2.25 2.25 0 01-1.183 1.981l-6.478 3.488M2.25 9v.906a2.25 2.25 0 001.183 1.981l6.478 3.488m8.839 2.51l-4.66-2.51m0 0l-1.023-.55a2.25 2.25 0 00-2.134 0l-1.022.55m0 0l-4.661 2.51m16.5 1.615a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V8.844a2.25 2.25 0 011.183-1.98l7.5-4.04a2.25 2.25 0 012.134 0l7.5 4.04a2.25 2.25 0 011.183 1.98V18z" />
+            </svg>
+            <p class="text-slate-500">Use the unsubscribe link from your notification email to unsubscribe.</p>
+        </div>
+        {% endif %}
+
+        <p class="mt-6 text-center text-xs text-slate-500">
+            <a href="/dashboard" class="text-blue-600 hover:text-blue-500 font-medium">Return to dashboard</a>
+        </p>
+    </div>
+</div>
+{% endblock %}

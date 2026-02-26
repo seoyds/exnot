@@ -3,10 +3,10 @@
 {% block title %}Subscribe{% endblock %}
 
 {% block header %}
-<header class="bg-white shadow">
+<header class="bg-white shadow-sm">
     <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        <h1 class="text-3xl font-bold tracking-tight text-gray-900">Subscribe to Fee Changes</h1>
-        <p class="mt-1 text-sm text-gray-500">Get notified when exchange fee schedules change.</p>
+        <h1 class="text-3xl font-bold tracking-tight text-slate-900">Subscribe to Fee Changes</h1>
+        <p class="mt-1 text-sm text-slate-500">Get notified when exchange fee schedules change.</p>
     </div>
 </header>
 {% endblock %}
@@ -15,7 +15,7 @@
 <div class="mx-auto max-w-2xl">
     <!-- Success Message -->
     {% if success %}
-    <div class="mb-6 rounded-md bg-green-50 border border-green-200 p-4">
+    <div class="mb-6 rounded-lg bg-green-50 border border-green-200 p-4">
         <div class="flex">
             <div class="flex-shrink-0">
                 <svg class="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
@@ -32,7 +32,7 @@
 
     <!-- Error Message -->
     {% if error %}
-    <div class="mb-6 rounded-md bg-red-50 border border-red-200 p-4">
+    <div class="mb-6 rounded-lg bg-red-50 border border-red-200 p-4">
         <div class="flex">
             <div class="flex-shrink-0">
                 <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
@@ -48,54 +48,64 @@
     {% endif %}
 
     <!-- Subscription Form -->
-    <form method="post" action="/dashboard/subscribe" class="rounded-lg bg-white shadow overflow-hidden">
+    <form method="post" action="/dashboard/subscribe"
+          class="rounded-lg bg-white shadow-sm border border-slate-200 overflow-hidden">
         <div class="p-6 space-y-6">
             <!-- Email -->
             <div>
-                <label for="email" class="block text-sm font-medium text-gray-700">Email Address <span class="text-red-500">*</span></label>
+                <label for="email" class="block text-sm font-medium text-slate-700">
+                    Email Address <span class="text-red-500">*</span>
+                </label>
                 <input type="email" name="email" id="email" required
                        placeholder="you@example.com"
-                       class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm
-                              focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm">
+                       class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 shadow-sm
+                              focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm
+                              placeholder-slate-400">
             </div>
 
             <!-- Name -->
             <div>
-                <label for="name" class="block text-sm font-medium text-gray-700">Name</label>
+                <label for="name" class="block text-sm font-medium text-slate-700">Name</label>
                 <input type="text" name="name" id="name"
                        placeholder="Your name (optional)"
-                       class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm
-                              focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm">
+                       class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 shadow-sm
+                              focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm
+                              placeholder-slate-400">
             </div>
 
-            <!-- Exchange Selection -->
+            <!-- Exchange Multi-Select (Checkboxes) -->
             <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">Exchanges to Monitor</label>
-                <p class="text-xs text-gray-500 mb-3">Select specific exchanges, or leave all unchecked to monitor all exchanges.</p>
-                <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-60 overflow-y-auto border border-gray-200 rounded-md p-3">
+                <label class="block text-sm font-medium text-slate-700 mb-2">Exchanges to Monitor</label>
+                <p class="text-xs text-slate-500 mb-3">Select specific exchanges, or leave all unchecked to monitor all exchanges.</p>
+                <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-60 overflow-y-auto border border-slate-200 rounded-md p-3 bg-slate-50">
                     {% for exch in all_exchanges %}
-                    <label class="flex items-center space-x-2 p-1.5 rounded hover:bg-gray-50 cursor-pointer">
+                    <label class="flex items-center space-x-2 p-1.5 rounded hover:bg-white cursor-pointer transition-colors">
                         <input type="checkbox" name="exchanges" value="{{ exch.code }}"
-                               class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
-                        <span class="text-sm text-gray-700" title="{{ exch.name }}">{{ exch.code }}</span>
+                               class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500">
+                        <div>
+                            <span class="text-sm font-medium text-slate-700">{{ exch.code }}</span>
+                            <span class="text-xs text-slate-400 block truncate" title="{{ exch.name }}">{{ exch.name }}</span>
+                        </div>
                     </label>
                     {% endfor %}
                 </div>
             </div>
 
-            <!-- Notification Frequency -->
+            <!-- Frequency Radio Buttons -->
             <div>
-                <label class="block text-sm font-medium text-gray-700 mb-3">Notification Frequency</label>
+                <label class="block text-sm font-medium text-slate-700 mb-3">Notification Frequency</label>
                 <div class="space-y-3">
                     {% for freq in frequencies %}
-                    <label class="relative flex items-start p-3 rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors">
+                    <label class="relative flex items-start p-3 rounded-lg border cursor-pointer hover:bg-slate-50 transition-colors
+                                  {% if freq == 'DAILY_DIGEST' %}border-blue-500 bg-blue-50 ring-1 ring-blue-500{% else %}border-slate-200{% endif %}"
+                           onclick="this.parentElement.querySelectorAll('label').forEach(l => { l.classList.remove('border-blue-500', 'bg-blue-50', 'ring-1', 'ring-blue-500'); l.classList.add('border-slate-200'); }); this.classList.remove('border-slate-200'); this.classList.add('border-blue-500', 'bg-blue-50', 'ring-1', 'ring-blue-500');">
                         <div class="flex h-5 items-center">
                             <input type="radio" name="frequency" value="{{ freq }}"
-                                   class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                   class="h-4 w-4 border-slate-300 text-blue-600 focus:ring-blue-500"
                                    {% if freq == 'DAILY_DIGEST' %}checked{% endif %}>
                         </div>
                         <div class="ml-3">
-                            <span class="block text-sm font-medium text-gray-900">
+                            <span class="block text-sm font-medium text-slate-900">
                                 {% if freq == 'IMMEDIATE' %}
                                     Immediate
                                 {% elif freq == 'DAILY_DIGEST' %}
@@ -106,7 +116,7 @@
                                     {{ freq | replace('_', ' ') | title }}
                                 {% endif %}
                             </span>
-                            <span class="block text-xs text-gray-500 mt-0.5">
+                            <span class="block text-xs text-slate-500 mt-0.5">
                                 {% if freq == 'IMMEDIATE' %}
                                     Get notified as soon as a change is detected.
                                 {% elif freq == 'DAILY_DIGEST' %}
@@ -123,12 +133,20 @@
         </div>
 
         <!-- Submit -->
-        <div class="bg-gray-50 px-6 py-4 border-t border-gray-200">
+        <div class="bg-slate-50 px-6 py-4 border-t border-slate-200">
             <button type="submit"
-                    class="w-full inline-flex justify-center items-center rounded-md bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 transition-colors">
+                    class="w-full inline-flex justify-center items-center rounded-md bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 transition-colors">
+                <svg class="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+                </svg>
                 Subscribe
             </button>
         </div>
     </form>
+
+    <p class="mt-4 text-center text-xs text-slate-500">
+        Already subscribed?
+        <a href="/dashboard/unsubscribe" class="text-blue-600 hover:text-blue-500 font-medium">Unsubscribe here</a>
+    </p>
 </div>
 {% endblock %}
