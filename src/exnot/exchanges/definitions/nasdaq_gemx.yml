@@ -1,0 +1,12 @@
+code: NASDAQ_GEMX
+name: "Nasdaq GEMX"
+operator: "Nasdaq, Inc."
+fee_schedule_url: "https://listingcenter.nasdaq.com/rulebook/gemx/rules/gemx-options-7"
+alternate_urls: []
+fee_schedule_format: HTML
+scraper_type: HTTP
+is_active: true
+parser_hints:
+  has_volume_tiers: true
+  has_index_options: false
+  notes: ""

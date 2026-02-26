@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #333; max-width: 700px; margin: 0 auto; padding: 20px; }
+    .header { background: #1a1a2e; color: white; padding: 20px; border-radius: 8px 8px 0 0; }
+    .header h1 { margin: 0; font-size: 20px; }
+    .header .subtitle { color: #a0aec0; font-size: 14px; margin-top: 4px; }
+    .content { background: #fff; border: 1px solid #e2e8f0; padding: 20px; }
+    .summary { background: #f7fafc; border-left: 4px solid #4299e1; padding: 12px 16px; margin: 16px 0; font-size: 14px; }
+    .stats { display: flex; gap: 16px; margin: 16px 0; }
+    .stat { background: #f7fafc; padding: 12px; border-radius: 6px; text-align: center; flex: 1; }
+    .stat .number { font-size: 24px; font-weight: bold; }
+    .stat .label { font-size: 12px; color: #718096; }
+    .stat.modified .number { color: #d69e2e; }
+    .stat.new .number { color: #38a169; }
+    .stat.removed .number { color: #e53e3e; }
+    table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13px; }
+    th { background: #edf2f7; text-align: left; padding: 8px 10px; font-weight: 600; }
+    td { padding: 8px 10px; border-bottom: 1px solid #e2e8f0; }
+    .change-new { color: #38a169; }
+    .change-modified { color: #d69e2e; }
+    .change-removed { color: #e53e3e; text-decoration: line-through; }
+    .btn { display: inline-block; background: #4299e1; color: white; padding: 10px 24px; border-radius: 6px; text-decoration: none; margin-top: 16px; }
+    .footer { background: #f7fafc; padding: 16px 20px; border-radius: 0 0 8px 8px; border: 1px solid #e2e8f0; border-top: 0; font-size: 12px; color: #718096; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>ExNot Fee Schedule Alert</h1>
+    <div class="subtitle">{{ exchange_code }} - Version {{ old_version or 'N/A' }} &rarr; {{ new_version }}</div>
+  </div>
+  <div class="content">
+    <p>Hi {{ recipient_name }},</p>
+    <p>A fee schedule change has been detected for <strong>{{ exchange_code }}</strong>.</p>
+
+    <div class="summary">{{ summary }}</div>
+
+    <div class="stats">
+      <div class="stat modified">
+        <div class="number">{{ modified_count }}</div>
+        <div class="label">Modified</div>
+      </div>
+      <div class="stat new">
+        <div class="number">{{ new_count }}</div>
+        <div class="label">New</div>
+      </div>
+      <div class="stat removed">
+        <div class="number">{{ removed_count }}</div>
+        <div class="label">Removed</div>
+      </div>
+    </div>
+
+    {% if changes %}
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Participant</th>
+          <th>Security</th>
+          <th>Fee Type</th>
+          <th>Old</th>
+          <th>New</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for change in changes[:20] %}
+        <tr>
+          <td class="change-{{ change.change_type|lower }}">{{ change.change_type }}</td>
+          <td>{{ change.participant_type or '-' }}</td>
+          <td>{{ change.security_class or '-' }}</td>
+          <td>{{ change.fee_type or '-' }}</td>
+          <td>{% if change.old_amount_cents is not none %}${{ "%.4f"|format(change.old_amount_cents / 10000) }}{% else %}-{% endif %}</td>
+          <td>{% if change.new_amount_cents is not none %}${{ "%.4f"|format(change.new_amount_cents / 10000) }}{% else %}-{% endif %}</td>
+        </tr>
+        {% endfor %}
+        {% if changes|length > 20 %}
+        <tr><td colspan="6" style="text-align:center; color:#718096;">... and {{ changes|length - 20 }} more changes</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+    {% endif %}
+
+    <a href="{{ app_url }}/dashboard/exchanges/{{ exchange_code }}" class="btn">View Full Details</a>
+  </div>
+  <div class="footer">
+    <p>You are receiving this because you subscribed to ExNot fee schedule alerts.</p>
+    <p><a href="{{ app_url }}/dashboard/unsubscribe">Unsubscribe</a></p>
+  </div>
+</body>
+</html>

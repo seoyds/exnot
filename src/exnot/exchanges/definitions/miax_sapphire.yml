@@ -1,0 +1,12 @@
+code: MIAX_SAPPHIRE
+name: "MIAX Sapphire Options"
+operator: "Miami International Holdings (MIH)"
+fee_schedule_url: "https://www.miaxglobal.com/markets/us-options/sapphire-options/fees"
+alternate_urls: []
+fee_schedule_format: HTML
+scraper_type: HTTP
+is_active: true
+parser_hints:
+  has_volume_tiers: true
+  has_index_options: false
+  notes: "Newest MIAX exchange"

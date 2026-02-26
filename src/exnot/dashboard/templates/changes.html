@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+
+{% block title %}Change History{% endblock %}
+
+{% block header %}
+<header class="bg-white shadow-sm">
+    <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+        <h1 class="text-3xl font-bold tracking-tight text-slate-900">Change History</h1>
+        <p class="mt-1 text-sm text-slate-500">Track all fee schedule changes across exchanges.</p>
+    </div>
+</header>
+{% endblock %}
+
+{% block content %}
+<!-- Filter Bar -->
+<form method="get" action="/dashboard/changes"
+      class="rounded-lg bg-white shadow-sm border border-slate-200 p-6 mb-8">
+    <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
+        <!-- Date Range -->
+        <div>
+            <label for="days" class="block text-sm font-medium text-slate-700 mb-1">Date Range</label>
+            <select name="days" id="days"
+                    class="block w-full rounded-md border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm bg-white border px-3 py-2">
+                <option value="7" {% if current_days == 7 %}selected{% endif %}>Last 7 days</option>
+                <option value="14" {% if current_days == 14 %}selected{% endif %}>Last 14 days</option>
+                <option value="30" {% if current_days == 30 %}selected{% endif %}>Last 30 days</option>
+                <option value="60" {% if current_days == 60 %}selected{% endif %}>Last 60 days</option>
+                <option value="90" {% if current_days == 90 %}selected{% endif %}>Last 90 days</option>
+                <option value="180" {% if current_days == 180 %}selected{% endif %}>Last 180 days</option>
+                <option value="365" {% if current_days == 365 %}selected{% endif %}>Last year</option>
+            </select>
+        </div>
+
+        <!-- Exchange Dropdown -->
+        <div>
+            <label for="exchange_code" class="block text-sm font-medium text-slate-700 mb-1">Exchange</label>
+            <select name="exchange_code" id="exchange_code"
+                    class="block w-full rounded-md border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm bg-white border px-3 py-2">
+                <option value="">All Exchanges</option>
+                {% for exch in all_exchanges %}
+                <option value="{{ exch.code }}" {% if current_exchange_code == exch.code %}selected{% endif %}>
+                    {{ exch.code }} - {{ exch.name }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <!-- Change Type -->
+        <div>
+            <label for="change_type" class="block text-sm font-medium text-slate-700 mb-1">Change Type</label>
+            <select name="change_type" id="change_type"
+                    class="block w-full rounded-md border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm bg-white border px-3 py-2">
+                <option value="">All Types</option>
+                {% for ct in change_types %}
+                <option value="{{ ct }}" {% if current_change_type == ct %}selected{% endif %}>
+                    {{ ct | replace('_', ' ') | title }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <!-- Submit -->
+        <div class="flex items-end">
+            <button type="submit"
+                    class="w-full inline-flex justify-center items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 transition-colors">
+                <svg class="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z" />
+                </svg>
+                Filter
+            </button>
+        </div>
+    </div>
+</form>
+
+<!-- Changes Table -->
+{% if changes %}
+<div class="rounded-lg bg-white shadow-sm border border-slate-200 overflow-hidden">
+    <div class="px-6 py-4 border-b border-slate-200 bg-slate-50">
+        <div class="flex items-center justify-between">
+            <h2 class="text-lg font-semibold text-slate-900">
+                {{ changes | length }} Change{{ 's' if changes | length != 1 else '' }}
+            </h2>
+            <div class="flex items-center space-x-4 text-xs text-slate-500">
+                <span class="flex items-center">
+                    <span class="inline-block w-2.5 h-2.5 bg-green-500 rounded-full mr-1.5"></span>
+                    New
+                </span>
+                <span class="flex items-center">
+                    <span class="inline-block w-2.5 h-2.5 bg-amber-500 rounded-full mr-1.5"></span>
+                    Modified
+                </span>
+                <span class="flex items-center">
+                    <span class="inline-block w-2.5 h-2.5 bg-red-500 rounded-full mr-1.5"></span>
+                    Removed
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-slate-200">
+            <thead class="bg-slate-50">
+                <tr>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Date</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Exchange</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Type</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Participant</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Fee Type</th>
+                    <th scope="col" class="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-slate-500">Old Amount</th>
+                    <th scope="col" class="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-slate-500">New Amount</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-200 bg-white">
+                {% for change in changes %}
+                <tr class="hover:bg-slate-50 transition-colors
+                           {% if change.change_type.value == 'NEW' %}border-l-4 border-l-green-500
+                           {% elif change.change_type.value == 'MODIFIED' %}border-l-4 border-l-amber-500
+                           {% elif change.change_type.value == 'REMOVED' %}border-l-4 border-l-red-500
+                           {% endif %}">
+                    <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-500">
+                        {{ change.detected_at.strftime('%Y-%m-%d') }}
+                        <span class="block text-xs text-slate-400">{{ change.detected_at.strftime('%H:%M UTC') }}</span>
+                    </td>
+                    <td class="whitespace-nowrap px-6 py-4 text-sm font-medium">
+                        {% if change.exchange %}
+                        <a href="/dashboard/exchanges/{{ change.exchange.code }}" class="text-blue-600 hover:text-blue-500">
+                            {{ change.exchange.code }}
+                        </a>
+                        {% else %}
+                        <span class="text-slate-400">Unknown</span>
+                        {% endif %}
+                    </td>
+                    <td class="whitespace-nowrap px-6 py-4 text-sm">
+                        {% if change.change_type.value == 'NEW' %}
+                        <span class="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800">
+                            <span class="mr-1 h-1.5 w-1.5 rounded-full bg-green-500 inline-block"></span>
+                            New
+                        </span>
+                        {% elif change.change_type.value == 'MODIFIED' %}
+                        <span class="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800">
+                            <span class="mr-1 h-1.5 w-1.5 rounded-full bg-amber-500 inline-block"></span>
+                            Modified
+                        </span>
+                        {% elif change.change_type.value == 'REMOVED' %}
+                        <span class="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-800">
+                            <span class="mr-1 h-1.5 w-1.5 rounded-full bg-red-500 inline-block"></span>
+                            Removed
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-700">
+                        {{ change.participant_type.value | replace('_', ' ') | title if change.participant_type else '-' }}
+                    </td>
+                    <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-700">
+                        {{ change.fee_type.value | replace('_', ' ') | title if change.fee_type else '-' }}
+                    </td>
+                    <td class="whitespace-nowrap px-6 py-4 text-sm text-right font-mono text-slate-500">
+                        {% if change.change_type.value == 'NEW' %}
+                        <span class="text-slate-300">&mdash;</span>
+                        {% else %}
+                        {{ cents_to_dollars(change.old_amount_cents) }}
+                        {% endif %}
+                    </td>
+                    <td class="whitespace-nowrap px-6 py-4 text-sm text-right font-mono font-medium
+                               {% if change.change_type.value == 'NEW' %}text-green-700
+                               {% elif change.change_type.value == 'REMOVED' %}text-red-700
+                               {% elif change.old_amount_cents is not none and change.new_amount_cents is not none %}
+                                   {% if change.new_amount_cents > change.old_amount_cents %}text-red-700
+                                   {% elif change.new_amount_cents < change.old_amount_cents %}text-green-700
+                                   {% else %}text-slate-900{% endif %}
+                               {% else %}text-slate-900{% endif %}">
+                        {% if change.change_type.value == 'REMOVED' %}
+                        <span class="text-slate-300">&mdash;</span>
+                        {% else %}
+                        {{ cents_to_dollars(change.new_amount_cents) }}
+                        {% if change.old_amount_cents is not none and change.new_amount_cents is not none and change.change_type.value == 'MODIFIED' %}
+                            {% if change.new_amount_cents > change.old_amount_cents %}
+                            <svg class="inline h-3 w-3 ml-0.5 text-red-500" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 19.5l15-15m0 0H8.25m11.25 0v11.25" />
+                            </svg>
+                            {% elif change.new_amount_cents < change.old_amount_cents %}
+                            <svg class="inline h-3 w-3 ml-0.5 text-green-500" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 4.5l15 15m0 0V8.25m0 11.25H8.25" />
+                            </svg>
+                            {% endif %}
+                        {% endif %}
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% else %}
+<div class="rounded-lg bg-white shadow-sm border border-slate-200 p-8 text-center">
+    <svg class="mx-auto h-12 w-12 text-slate-300" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+    <p class="mt-2 text-slate-500">No changes found for the selected filters.</p>
+    <p class="mt-1 text-sm text-slate-400">Try expanding the date range or changing the filters.</p>
+</div>
+{% endif %}
+{% endblock %}

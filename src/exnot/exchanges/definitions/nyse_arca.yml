@@ -1,0 +1,12 @@
+code: NYSE_ARCA
+name: "NYSE Arca Options"
+operator: "Intercontinental Exchange (ICE)"
+fee_schedule_url: "https://www.nyse.com/publicdocs/nyse/markets/arca-options/NYSE_Arca_Options_Fee_Schedule.pdf"
+alternate_urls: []
+fee_schedule_format: PDF
+scraper_type: HTTP
+is_active: true
+parser_hints:
+  has_volume_tiers: true
+  has_index_options: false
+  notes: ""

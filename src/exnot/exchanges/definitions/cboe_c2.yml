@@ -1,0 +1,12 @@
+code: CBOE_C2
+name: "Cboe C2 Options Exchange"
+operator: "Cboe Global Markets"
+fee_schedule_url: "https://www.cboe.com/us/options/membership/fee_schedule/ctwo/"
+alternate_urls: []
+fee_schedule_format: HTML
+scraper_type: HTTP
+is_active: true
+parser_hints:
+  has_volume_tiers: true
+  has_index_options: false
+  notes: ""

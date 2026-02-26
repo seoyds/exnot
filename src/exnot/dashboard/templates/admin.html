@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Panel{% endblock %}
+
+{% block header %}
+<header class="bg-white shadow">
+    <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+        <div class="flex items-center justify-between">
+            <div>
+                <h1 class="text-3xl font-bold tracking-tight text-gray-900">Admin Panel</h1>
+                <p class="mt-1 text-sm text-gray-500">Manage scraping jobs and view system logs.</p>
+            </div>
+            <span class="inline-flex items-center rounded-md bg-indigo-100 px-3 py-1 text-sm font-medium text-indigo-700">
+                Admin: {{ user.username }}
+            </span>
+        </div>
+    </div>
+</header>
+{% endblock %}
+
+{% block content %}
+<!-- Status Message -->
+{% if message %}
+<div class="mb-6 rounded-md bg-blue-50 border border-blue-200 p-4">
+    <div class="flex">
+        <div class="flex-shrink-0">
+            <svg class="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clip-rule="evenodd" />
+            </svg>
+        </div>
+        <div class="ml-3">
+            <p class="text-sm font-medium text-blue-800">{{ message | replace('+', ' ') }}</p>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Scrape Controls -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-10">
+
+    <!-- Scrape All -->
+    <div class="rounded-lg bg-white shadow overflow-hidden">
+        <div class="p-6">
+            <h2 class="text-lg font-semibold text-gray-900 mb-2">Scrape All Exchanges</h2>
+            <p class="text-sm text-gray-500 mb-4">
+                Trigger a full scrape of all active exchanges. This will run in the background.
+            </p>
+            <form method="post" action="/dashboard/admin/scrape-all"
+                  hx-post="/dashboard/admin/scrape-all"
+                  hx-swap="none"
+                  hx-indicator="#scrape-all-indicator">
+                <button type="submit"
+                        class="w-full inline-flex justify-center items-center rounded-md bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 transition-colors">
+                    <svg class="mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182M2.985 19.644l3.181-3.182" />
+                    </svg>
+                    Scrape All Exchanges
+                </button>
+                <span id="scrape-all-indicator" class="htmx-indicator mt-2 text-xs text-gray-500 block text-center">
+                    Triggering scrape...
+                </span>
+            </form>
+        </div>
+    </div>
+
+    <!-- Per-Exchange Scrape -->
+    <div class="lg:col-span-2 rounded-lg bg-white shadow overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200 bg-gray-50">
+            <h2 class="text-lg font-semibold text-gray-900">Scrape Individual Exchange</h2>
+        </div>
+        <div class="p-6">
+            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                {% for exch in exchanges %}
+                <form method="post" action="/dashboard/admin/scrape/{{ exch.code }}"
+                      hx-post="/dashboard/admin/scrape/{{ exch.code }}"
+                      hx-swap="none"
+                      class="inline">
+                    <button type="submit"
+                            class="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 hover:border-indigo-300 hover:text-indigo-600 transition-colors"
+                            title="Scrape {{ exch.name }}">
+                        <span class="block font-semibold">{{ exch.code }}</span>
+                        <span class="block text-xs text-gray-400 truncate">{{ exch.operator }}</span>
+                    </button>
+                </form>
+                {% endfor %}
+            </div>
+            {% if not exchanges %}
+            <p class="text-sm text-gray-500 text-center py-4">No active exchanges configured.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Recent Scrape Logs -->
+<div class="rounded-lg bg-white shadow overflow-hidden">
+    <div class="px-6 py-4 border-b border-gray-200">
+        <h2 class="text-lg font-semibold text-gray-900">
+            Recent Scrape Log
+            <span class="text-sm font-normal text-gray-500 ml-2">{{ scrape_logs | length }} entries</span>
+        </h2>
+    </div>
+
+    {% if scrape_logs %}
+    <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Started</th>
+                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Exchange</th>
+                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Status</th>
+                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Completed</th>
+                    <th scope="col" class="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider text-gray-500">Changes</th>
+                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Error</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200 bg-white">
+                {% for log in scrape_logs %}
+                <tr class="{% if loop.index is odd %}bg-white{% else %}bg-gray-50{% endif %} hover:bg-gray-100 transition-colors">
+                    <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-500">
+                        {{ log.started_at.strftime('%Y-%m-%d %H:%M') if log.started_at else '-' }}
+                    </td>
+                    <td class="whitespace-nowrap px-4 py-3 text-sm">
+                        <a href="/dashboard/exchanges/{{ log.exchange_code }}" class="text-indigo-600 hover:text-indigo-500 font-medium">
+                            {{ log.exchange_code }}
+                        </a>
+                        <span class="block text-xs text-gray-400">{{ log.exchange_name }}</span>
+                    </td>
+                    <td class="whitespace-nowrap px-4 py-3 text-sm">
+                        {% if log.status == 'SUCCESS' %}
+                        <span class="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800">
+                            Success
+                        </span>
+                        {% elif log.status == 'FAILED' %}
+                        <span class="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-800">
+                            Failed
+                        </span>
+                        {% elif log.status == 'NO_CHANGE' %}
+                        <span class="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600">
+                            No Change
+                        </span>
+                        {% else %}
+                        <span class="inline-flex items-center rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-medium text-yellow-800">
+                            {{ log.status }}
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-500">
+                        {{ log.completed_at.strftime('%Y-%m-%d %H:%M') if log.completed_at else 'In progress...' }}
+                    </td>
+                    <td class="whitespace-nowrap px-4 py-3 text-sm text-center">
+                        {% if log.has_changes %}
+                        <span class="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">Yes</span>
+                        {% else %}
+                        <span class="text-gray-400">No</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-3 text-sm text-red-600 max-w-xs truncate" title="{{ log.error_message or '' }}">
+                        {{ log.error_message or '' }}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="p-8 text-center">
+        <p class="text-gray-500">No scrape logs available yet.</p>
+        <p class="mt-2 text-sm text-gray-400">Logs will appear here after the first scrape is triggered.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

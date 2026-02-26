@@ -1,0 +1,13 @@
+code: CBOE_C1
+name: "Cboe Options Exchange (C1)"
+operator: "Cboe Global Markets"
+fee_schedule_url: "https://www.cboe.com/us/options/membership/fee_schedule/"
+alternate_urls:
+  - "https://cdn.cboe.com/resources/membership/Cboe_FeeSchedule.pdf"
+fee_schedule_format: HTML
+scraper_type: HTTP
+is_active: true
+parser_hints:
+  has_volume_tiers: true
+  has_index_options: true
+  notes: "Primary exchange for SPX and VIX index options"

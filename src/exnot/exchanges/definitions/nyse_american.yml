@@ -1,0 +1,12 @@
+code: NYSE_AMERICAN
+name: "NYSE American Options"
+operator: "Intercontinental Exchange (ICE)"
+fee_schedule_url: "https://www.nyse.com/publicdocs/nyse/markets/american-options/NYSE_American_Options_Fee_Schedule.pdf"
+alternate_urls: []
+fee_schedule_format: PDF
+scraper_type: HTTP
+is_active: true
+parser_hints:
+  has_volume_tiers: true
+  has_index_options: false
+  notes: "Has floor-based trading"

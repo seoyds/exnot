@@ -1,0 +1,12 @@
+code: BOX_OPTIONS
+name: "BOX Options Exchange"
+operator: "BOX Holdings"
+fee_schedule_url: "https://boxexchange.com/regulatory/fees/"
+alternate_urls: []
+fee_schedule_format: HTML
+scraper_type: HTTP
+is_active: true
+parser_hints:
+  has_volume_tiers: true
+  has_index_options: false
+  notes: "Fee schedule page links to PDF. Has PIP auction."

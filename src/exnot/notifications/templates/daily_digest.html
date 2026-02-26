@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #333; max-width: 700px; margin: 0 auto; padding: 20px; }
+    .header { background: #1a1a2e; color: white; padding: 20px; border-radius: 8px 8px 0 0; }
+    .header h1 { margin: 0; font-size: 20px; }
+    .content { background: #fff; border: 1px solid #e2e8f0; padding: 20px; }
+    .exchange-section { margin: 20px 0; padding: 16px; background: #f7fafc; border-radius: 6px; }
+    .exchange-section h3 { margin: 0 0 8px 0; color: #2d3748; }
+    .exchange-section .summary { font-size: 14px; color: #4a5568; }
+    .exchange-section .stats { font-size: 13px; color: #718096; margin-top: 4px; }
+    .highlight { background: #ebf8ff; border-left: 4px solid #4299e1; padding: 12px 16px; margin: 16px 0; }
+    .btn { display: inline-block; background: #4299e1; color: white; padding: 10px 24px; border-radius: 6px; text-decoration: none; margin-top: 16px; }
+    .footer { background: #f7fafc; padding: 16px 20px; border-radius: 0 0 8px 8px; border: 1px solid #e2e8f0; border-top: 0; font-size: 12px; color: #718096; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>ExNot Daily Fee Schedule Digest</h1>
+  </div>
+  <div class="content">
+    <p>Hi {{ recipient_name }},</p>
+
+    <div class="highlight">
+      <strong>{{ reports|length }} exchange(s)</strong> had fee schedule changes today,
+      with a total of <strong>{{ total_changes }} change(s)</strong>.
+    </div>
+
+    {% for report in reports %}
+    <div class="exchange-section">
+      <h3>{{ report.exchange_code }}</h3>
+      <div class="summary">{{ report.summary }}</div>
+      <div class="stats">
+        {% if report.modified_count %}{{ report.modified_count }} modified{% endif %}
+        {% if report.new_count %} | {{ report.new_count }} new{% endif %}
+        {% if report.removed_count %} | {{ report.removed_count }} removed{% endif %}
+        | <a href="{{ app_url }}/dashboard/exchanges/{{ report.exchange_code }}">View details</a>
+      </div>
+    </div>
+    {% endfor %}
+
+    <a href="{{ app_url }}/dashboard/changes" class="btn">View All Changes</a>
+  </div>
+  <div class="footer">
+    <p>You are receiving this because you subscribed to ExNot fee schedule alerts.</p>
+    <p><a href="{{ app_url }}/dashboard/unsubscribe">Unsubscribe</a></p>
+  </div>
+</body>
+</html>

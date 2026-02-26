@@ -1,0 +1,500 @@
+"""Dashboard web routes using FastAPI + Jinja2 + HTMX."""
+
+from __future__ import annotations
+
+from decimal import Decimal
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, Form, Query, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.templating import Jinja2Templates
+from jose import JWTError, jwt
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from exnot.config import get_settings
+from exnot.db.engine import get_db
+from exnot.db.models import (
+    ChangeType,
+    FeeType,
+    NormalizedFee,
+    NotificationFrequency,
+    ParticipantType,
+    SecurityClass,
+    Subscriber,
+    User,
+)
+from exnot.db.repositories import (
+    ExchangeRepository,
+    FeeChangeRepository,
+    NormalizedFeeRepository,
+    SnapshotRepository,
+    SubscriberRepository,
+    UserRepository,
+)
+
+TEMPLATES_DIR = Path(__file__).parent / "templates"
+templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+
+router = APIRouter(tags=["dashboard"])
+
+ALGORITHM = "HS256"
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _cents_to_dollars(amount_cents: int | None) -> str:
+    """Convert amount in hundredths-of-a-cent to a human-readable dollar string."""
+    if amount_cents is None:
+        return "N/A"
+    amount = Decimal(amount_cents) / Decimal(10000)
+    return f"${amount:,.4f}"
+
+
+async def _get_current_user_from_cookie(
+    request: Request,
+    db: AsyncSession,
+) -> User | None:
+    """Extract the logged-in user from the session cookie, if present."""
+    token = request.cookies.get("access_token")
+    if not token:
+        return None
+    settings = get_settings()
+    try:
+        payload = jwt.decode(token, settings.secret_key, algorithms=[ALGORITHM])
+        email: str | None = payload.get("sub")
+        if email is None:
+            return None
+    except JWTError:
+        return None
+    repo = UserRepository(db)
+    return await repo.get_by_email(email)
+
+
+# ---------------------------------------------------------------------------
+# Dashboard overview
+# ---------------------------------------------------------------------------
+
+
+@router.get("/dashboard", response_class=HTMLResponse)
+async def dashboard_overview(request: Request, db: AsyncSession = Depends(get_db)):
+    """Main dashboard showing all exchanges and recent changes."""
+    exchange_repo = ExchangeRepository(db)
+    exchanges = await exchange_repo.get_all(active_only=False)
+
+    snapshot_repo = SnapshotRepository(db)
+    exchange_data = []
+    for exch in exchanges:
+        latest = await snapshot_repo.get_latest(exch.id)
+        exchange_data.append(
+            {
+                "exchange": exch,
+                "latest_snapshot": latest,
+                "version": latest.version if latest else 0,
+                "last_updated": latest.created_at if latest else None,
+                "status": latest.status.value if latest else "NO_DATA",
+            }
+        )
+
+    change_repo = FeeChangeRepository(db)
+    recent_changes = await change_repo.get_recent(days=30, limit=10)
+
+    user = await _get_current_user_from_cookie(request, db)
+
+    return templates.TemplateResponse(
+        "dashboard.html",
+        {
+            "request": request,
+            "exchange_data": exchange_data,
+            "recent_changes": recent_changes,
+            "cents_to_dollars": _cents_to_dollars,
+            "user": user,
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# Exchange detail
+# ---------------------------------------------------------------------------
+
+
+@router.get("/dashboard/exchanges/{code}", response_class=HTMLResponse)
+async def exchange_detail(
+    code: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Detail page for a single exchange showing current fees and version history."""
+    exchange_repo = ExchangeRepository(db)
+    exchange = await exchange_repo.get_by_code(code.upper())
+    if not exchange:
+        return templates.TemplateResponse(
+            "dashboard.html",
+            {
+                "request": request,
+                "exchange_data": [],
+                "recent_changes": [],
+                "cents_to_dollars": _cents_to_dollars,
+                "user": None,
+                "error": f"Exchange '{code}' not found.",
+            },
+        )
+
+    snapshot_repo = SnapshotRepository(db)
+    latest_snapshot = await snapshot_repo.get_latest(exchange.id)
+
+    fee_repo = NormalizedFeeRepository(db)
+    fees = await fee_repo.get_latest_for_exchange(exchange.id)
+
+    versions = await snapshot_repo.get_history(exchange.id, limit=20)
+
+    user = await _get_current_user_from_cookie(request, db)
+
+    return templates.TemplateResponse(
+        "exchange.html",
+        {
+            "request": request,
+            "exchange": exchange,
+            "latest_snapshot": latest_snapshot,
+            "fees": fees,
+            "versions": versions,
+            "cents_to_dollars": _cents_to_dollars,
+            "user": user,
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# Comparison
+# ---------------------------------------------------------------------------
+
+
+@router.get("/dashboard/compare", response_class=HTMLResponse)
+async def compare_page(
+    request: Request,
+    selected: list[str] = Query(default=[]),
+    participant_type: str | None = Query(default=None),
+    security_class: str | None = Query(default=None),
+    fee_type: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Fee comparison page across multiple exchanges."""
+    exchange_repo = ExchangeRepository(db)
+    all_exchanges = await exchange_repo.get_all(active_only=True)
+
+    comparison_rows: list[dict] = []
+    selected_codes: list[str] = [s.upper() for s in selected]
+
+    if selected_codes:
+        fee_repo = NormalizedFeeRepository(db)
+
+        # Gather fees per exchange
+        exchange_fees: dict[str, list[NormalizedFee]] = {}
+        for sel_code in selected_codes:
+            exch = await exchange_repo.get_by_code(sel_code)
+            if not exch:
+                continue
+            fees = await fee_repo.get_latest_for_exchange(exch.id)
+            exchange_fees[sel_code] = fees
+
+        # Build comparison rows keyed by (participant_type, security_class, order_type, fee_type)
+        all_keys: set[tuple] = set()
+        for code_key, fees in exchange_fees.items():
+            for f in fees:
+                # Apply filters
+                if participant_type and f.participant_type.value != participant_type.upper():
+                    continue
+                if security_class and f.security_class.value != security_class.upper():
+                    continue
+                if fee_type and f.fee_type.value != fee_type.upper():
+                    continue
+                key = (
+                    f.participant_type.value,
+                    f.security_class.value,
+                    f.order_type.value,
+                    f.fee_type.value,
+                )
+                all_keys.add(key)
+
+        for key in sorted(all_keys):
+            row = {
+                "participant_type": key[0],
+                "security_class": key[1],
+                "order_type": key[2],
+                "fee_type": key[3],
+                "cells": {},
+                "cheapest": None,
+                "most_expensive": None,
+            }
+            amounts: dict[str, int] = {}
+            for code_key, fees in exchange_fees.items():
+                for f in fees:
+                    fkey = (
+                        f.participant_type.value,
+                        f.security_class.value,
+                        f.order_type.value,
+                        f.fee_type.value,
+                    )
+                    if fkey == key:
+                        row["cells"][code_key] = {
+                            "amount_cents": f.amount_cents,
+                            "amount": _cents_to_dollars(f.amount_cents),
+                            "is_rebate": f.is_rebate,
+                        }
+                        amounts[code_key] = f.amount_cents
+                        break
+
+            if amounts:
+                row["cheapest"] = min(amounts, key=amounts.get)  # type: ignore[arg-type]
+                row["most_expensive"] = max(amounts, key=amounts.get)  # type: ignore[arg-type]
+
+            comparison_rows.append(row)
+
+    user = await _get_current_user_from_cookie(request, db)
+
+    # Enum values for filter dropdowns
+    participant_types = [pt.value for pt in ParticipantType]
+    security_classes = [sc.value for sc in SecurityClass]
+    fee_types = [ft.value for ft in FeeType]
+
+    return templates.TemplateResponse(
+        "comparison.html",
+        {
+            "request": request,
+            "all_exchanges": all_exchanges,
+            "selected_codes": selected_codes,
+            "comparison_rows": comparison_rows,
+            "participant_types": participant_types,
+            "security_classes": security_classes,
+            "fee_types": fee_types,
+            "current_participant_type": participant_type or "",
+            "current_security_class": security_class or "",
+            "current_fee_type": fee_type or "",
+            "user": user,
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# Changes history
+# ---------------------------------------------------------------------------
+
+
+@router.get("/dashboard/changes", response_class=HTMLResponse)
+async def changes_page(
+    request: Request,
+    days: int = Query(default=30, ge=1, le=365),
+    exchange_code: str | None = Query(default=None),
+    change_type: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Change history page with filters."""
+    change_repo = FeeChangeRepository(db)
+    changes = await change_repo.get_recent(days=days, limit=200)
+
+    # Apply optional filters
+    if exchange_code:
+        changes = [
+            c for c in changes if c.exchange and c.exchange.code == exchange_code.upper()
+        ]
+    if change_type:
+        changes = [c for c in changes if c.change_type.value == change_type.upper()]
+
+    exchange_repo = ExchangeRepository(db)
+    all_exchanges = await exchange_repo.get_all(active_only=False)
+
+    user = await _get_current_user_from_cookie(request, db)
+
+    change_types = [ct.value for ct in ChangeType]
+
+    return templates.TemplateResponse(
+        "changes.html",
+        {
+            "request": request,
+            "changes": changes,
+            "all_exchanges": all_exchanges,
+            "change_types": change_types,
+            "current_days": days,
+            "current_exchange_code": exchange_code or "",
+            "current_change_type": change_type or "",
+            "cents_to_dollars": _cents_to_dollars,
+            "user": user,
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# Subscribe
+# ---------------------------------------------------------------------------
+
+
+@router.get("/dashboard/subscribe", response_class=HTMLResponse)
+async def subscribe_page(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Subscription management page."""
+    exchange_repo = ExchangeRepository(db)
+    all_exchanges = await exchange_repo.get_all(active_only=True)
+
+    user = await _get_current_user_from_cookie(request, db)
+
+    frequencies = [nf.value for nf in NotificationFrequency]
+
+    return templates.TemplateResponse(
+        "subscribe.html",
+        {
+            "request": request,
+            "all_exchanges": all_exchanges,
+            "frequencies": frequencies,
+            "user": user,
+            "success": request.query_params.get("success"),
+            "error": request.query_params.get("error"),
+        },
+    )
+
+
+@router.post("/dashboard/subscribe", response_class=HTMLResponse)
+async def subscribe_submit(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    email: str = Form(...),
+    name: str = Form(""),
+    frequency: str = Form("DAILY_DIGEST"),
+):
+    """Handle subscription form submission."""
+    form_data = await request.form()
+    exchange_codes = form_data.getlist("exchanges")
+
+    subscriber_repo = SubscriberRepository(db)
+    existing = await subscriber_repo.get_by_email(email)
+    if existing:
+        return RedirectResponse(
+            url="/dashboard/subscribe?error=Email+already+subscribed",
+            status_code=303,
+        )
+
+    subscriber = Subscriber(
+        email=email,
+        name=name if name else None,
+        exchanges_filter=list(exchange_codes) if exchange_codes else None,
+        notification_frequency=NotificationFrequency(frequency),
+    )
+    await subscriber_repo.create(subscriber)
+    await db.commit()
+
+    return RedirectResponse(
+        url="/dashboard/subscribe?success=1",
+        status_code=303,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Unsubscribe
+# ---------------------------------------------------------------------------
+
+
+@router.get("/dashboard/unsubscribe", response_class=HTMLResponse)
+async def unsubscribe_page(
+    request: Request,
+    email: str = Query(default=""),
+    token: str = Query(default=""),
+    db: AsyncSession = Depends(get_db),
+):
+    """Unsubscribe page -- deactivates the subscriber by email."""
+    message = None
+    error = None
+
+    if email:
+        subscriber_repo = SubscriberRepository(db)
+        subscriber = await subscriber_repo.get_by_email(email)
+        if subscriber and subscriber.is_active:
+            subscriber.is_active = False
+            await db.commit()
+            message = "You have been successfully unsubscribed."
+        elif subscriber and not subscriber.is_active:
+            message = "This email is already unsubscribed."
+        else:
+            error = "Email address not found in our subscriber list."
+
+    user = await _get_current_user_from_cookie(request, db)
+
+    return templates.TemplateResponse(
+        "unsubscribe.html",
+        {
+            "request": request,
+            "email": email,
+            "message": message,
+            "error": error,
+            "user": user,
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# Login
+# ---------------------------------------------------------------------------
+
+
+@router.get("/dashboard/login", response_class=HTMLResponse)
+async def login_page(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Login page."""
+    user = await _get_current_user_from_cookie(request, db)
+    return templates.TemplateResponse(
+        "login.html",
+        {
+            "request": request,
+            "user": user,
+            "error": request.query_params.get("error"),
+        },
+    )
+
+
+@router.post("/dashboard/login", response_class=HTMLResponse)
+async def login_submit(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    username: str = Form(...),
+    password: str = Form(...),
+):
+    """Handle login form submission -- set cookie with JWT."""
+    from exnot.api.deps import create_access_token, verify_password
+
+    user_repo = UserRepository(db)
+    user = await user_repo.get_by_username(username)
+
+    if not user or not verify_password(password, user.hashed_password):
+        return RedirectResponse(
+            url="/dashboard/login?error=Invalid+username+or+password",
+            status_code=303,
+        )
+
+    if not user.is_active:
+        return RedirectResponse(
+            url="/dashboard/login?error=Account+is+disabled",
+            status_code=303,
+        )
+
+    token = create_access_token({"sub": user.email})
+    response = RedirectResponse(url="/dashboard", status_code=303)
+    response.set_cookie(
+        key="access_token",
+        value=token,
+        httponly=True,
+        max_age=60 * 60 * 24,  # 24 hours
+        samesite="lax",
+    )
+    return response
+
+
+@router.get("/dashboard/logout")
+async def logout(request: Request):
+    """Clear the session cookie and redirect to dashboard."""
+    response = RedirectResponse(url="/dashboard", status_code=303)
+    response.delete_cookie("access_token")
+    return response

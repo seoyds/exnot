@@ -1,0 +1,12 @@
+code: MEMX_OPTIONS
+name: "MEMX Options Exchange"
+operator: "MEMX Holdings"
+fee_schedule_url: "https://info.memxtrading.com/us-options-trading-resources/us-options-fee-schedule/"
+alternate_urls: []
+fee_schedule_format: HTML
+scraper_type: HTTP
+is_active: true
+parser_hints:
+  has_volume_tiers: true
+  has_index_options: false
+  notes: ""
