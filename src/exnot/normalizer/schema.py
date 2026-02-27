@@ -14,6 +14,8 @@ class ParticipantType(str, Enum):
     AWAY_MARKET_MAKER = "AWAY_MARKET_MAKER"
     FIRM = "FIRM"
     BROKER_DEALER = "BROKER_DEALER"
+    NON_CUSTOMER = "NON_CUSTOMER"
+    ALL = "ALL"
 
 
 class SecurityClass(str, Enum):
@@ -23,6 +25,13 @@ class SecurityClass(str, Enum):
     ETF = "ETF"
     EQUITY = "EQUITY"
     MINI = "MINI"
+    SPY = "SPY"
+    QQQ = "QQQ"
+    IWM = "IWM"
+    NDX = "NDX"
+    RUT = "RUT"
+    VIX = "VIX"
+    ALL = "ALL"
 
 
 class OrderType(str, Enum):
@@ -31,6 +40,12 @@ class OrderType(str, Enum):
     AUCTION = "AUCTION"
     DIRECTED = "DIRECTED"
     QCC = "QCC"
+    PIM = "PIM"
+    CROSSING = "CROSSING"
+    FLEX = "FLEX"
+    OPENING = "OPENING"
+    ROUTED = "ROUTED"
+    ALL = "ALL"
 
 
 class FeeType(str, Enum):
@@ -43,27 +58,70 @@ class FeeType(str, Enum):
     CONNECTIVITY = "CONNECTIVITY"
     MARKET_DATA = "MARKET_DATA"
     MEMBERSHIP = "MEMBERSHIP"
+    CROSSING_FEE = "CROSSING_FEE"
+    PIM_FEE = "PIM_FEE"
+    RESPONSE_FEE = "RESPONSE_FEE"
+    BREAK_UP_REBATE = "BREAK_UP_REBATE"
+    SURCHARGE = "SURCHARGE"
+    CANCELLATION = "CANCELLATION"
+    STOCK_HANDLING = "STOCK_HANDLING"
+
+
+class FeeUnit(str, Enum):
+    PER_CONTRACT = "PER_CONTRACT"
+    PER_CONTRACT_SIDE = "PER_CONTRACT_SIDE"
+    PER_SHARE = "PER_SHARE"
+    MONTHLY_FLAT = "MONTHLY_FLAT"
+    PER_PORT_MONTHLY = "PER_PORT_MONTHLY"
+    PERCENTAGE = "PERCENTAGE"
+    PER_ORDER = "PER_ORDER"
+
+
+class TierConditionCriterion(BaseModel):
+    """A single criterion within a tier condition."""
+    metric: str = Field(description="ADAV, ADRV, ADV, NBBO_PCT, TOTAL_VOLUME, CCV_PCT, CROSS_ASSET")
+    capacities: list[str] | None = Field(default=None, description="Participant types counted")
+    security_filter: str | None = None
+    operator: str = Field(description=">=, <=, >, <, ==")
+    value: float = Field(description="Threshold value")
+    unit: str = Field(description="PCT_OCV, PCT_CCV, PCT_TCV, CONTRACTS, PERCENT")
+    description: str = ""
+
+
+class TierCondition(BaseModel):
+    """Structured tier condition with AND/OR logic."""
+    logic: str = Field(default="AND", description="AND or OR")
+    criteria: list[TierConditionCriterion] = Field(default_factory=list)
 
 
 class NormalizedFeeEntry(BaseModel):
     """A single normalized fee entry."""
 
     exchange_code: str
+    fee_code: str | None = None
     participant_type: ParticipantType
+    contra_party_type: ParticipantType | None = None
     security_class: SecurityClass
+    symbol: str | None = None
     order_type: OrderType
     fee_type: FeeType
+    fee_unit: FeeUnit = FeeUnit.PER_CONTRACT
     amount: Decimal = Field(description="Per-contract amount in USD. Negative for rebates.")
     is_rebate: bool = False
-    volume_tier: str | None = None
-    tier_threshold_pct: float | None = Field(
-        default=None, description="Tier threshold as % of total OCV"
-    )
-    tier_threshold_contracts: int | None = Field(
-        default=None, description="Tier threshold in absolute contracts"
-    )
+    routing_destination: str | None = None
+    tier_group: str | None = None
+    tier_number: int | None = None
+    tier_conditions: TierCondition | None = None
+    conditions: dict | None = None
     effective_date: date | None = None
+    expiry_date: date | None = None
+    section_ref: str | None = None
     notes: str | None = None
+
+    # Kept for backward compatibility
+    volume_tier: str | None = None
+    tier_threshold_pct: float | None = None
+    tier_threshold_contracts: int | None = None
 
     @property
     def amount_cents(self) -> int:
@@ -78,6 +136,7 @@ class NormalizedFeeSchedule(BaseModel):
     exchange_name: str
     effective_date: date | None = None
     fees: list[NormalizedFeeEntry] = Field(default_factory=list)
+    tiers: list[dict] = Field(default_factory=list, description="Tier group definitions")
     parsing_confidence: float = 0.0
     extraction_notes: str = ""
 

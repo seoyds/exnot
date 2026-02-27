@@ -34,17 +34,27 @@ class ExchangeListResponse(BaseModel):
 class NormalizedFeeResponse(BaseModel):
     id: uuid.UUID
     exchange_code: str
+    fee_code: str | None = None
     participant_type: str
+    contra_party_type: str | None = None
     security_class: str
+    symbol: str | None = None
     order_type: str
     fee_type: str
+    fee_unit: str = "PER_CONTRACT"
     amount: Decimal
     is_rebate: bool
+    routing_destination: str | None = None
+    tier_group: str | None = None
+    tier_number: int | None = None
+    conditions: dict | None = None
+    effective_date: date | None = None
+    expiry_date: date | None = None
+    section_ref: str | None = None
+    notes: str | None = None
     volume_tier: str | None = None
     tier_threshold_pct: float | None = None
     tier_threshold_contracts: int | None = None
-    effective_date: date | None = None
-    notes: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -53,17 +63,27 @@ class NormalizedFeeResponse(BaseModel):
         return cls(
             id=fee.id,
             exchange_code=fee.exchange.code if fee.exchange else "",
+            fee_code=fee.fee_code,
             participant_type=fee.participant_type.value,
+            contra_party_type=fee.contra_party_type.value if fee.contra_party_type else None,
             security_class=fee.security_class.value,
+            symbol=fee.symbol,
             order_type=fee.order_type.value,
             fee_type=fee.fee_type.value,
+            fee_unit=fee.fee_unit.value if fee.fee_unit else "PER_CONTRACT",
             amount=Decimal(fee.amount_cents) / Decimal(10000),
             is_rebate=fee.is_rebate,
+            routing_destination=fee.routing_destination,
+            tier_group=fee.tier.tier_group if fee.tier else None,
+            tier_number=fee.tier.tier_number if fee.tier else None,
+            conditions=fee.conditions,
+            effective_date=fee.effective_date,
+            expiry_date=fee.expiry_date,
+            section_ref=fee.section_ref,
+            notes=fee.notes,
             volume_tier=fee.volume_tier,
             tier_threshold_pct=fee.tier_threshold_pct,
             tier_threshold_contracts=fee.tier_threshold_contracts,
-            effective_date=fee.effective_date,
-            notes=fee.notes,
         )
 
 

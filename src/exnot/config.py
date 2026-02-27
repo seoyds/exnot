@@ -49,9 +49,14 @@ class Settings(BaseSettings):
 
     # AI
     ai_model: str = "claude-sonnet-4-6"
-    ai_max_tokens: int = 32768
+    ai_max_tokens: int = 8192
     ai_confidence_threshold: float = 0.8
     ai_max_retries: int = 3
+
+    # URL Discovery
+    serpapi_api_key: str = ""
+    discovery_max_candidates: int = 15
+    discovery_fetch_timeout: int = 10
 
 
 @lru_cache

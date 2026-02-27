@@ -51,13 +51,20 @@ class ChangeReport:
 
 
 def _fee_key(fee: NormalizedFeeEntry) -> tuple:
-    """Create a comparison key for a fee entry."""
+    """Create a comparison key for a fee entry.
+
+    Uses V2 dimensions (fee_code, contra_party, symbol, tier_number) when available,
+    falling back to V1 volume_tier for backward compatibility.
+    """
     return (
         fee.participant_type,
         fee.security_class,
         fee.order_type,
         fee.fee_type,
-        fee.volume_tier or "",
+        fee.fee_code or "",
+        fee.contra_party_type or "",
+        fee.symbol or "",
+        fee.tier_number if fee.tier_number is not None else (fee.volume_tier or ""),
     )
 
 

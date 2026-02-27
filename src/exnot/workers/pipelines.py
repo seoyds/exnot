@@ -15,10 +15,12 @@ from sqlalchemy.orm import Session
 
 from exnot.db.models import (
     ChangeType,
+    DiscoveryStatus,
     Exchange,
     FeeChange,
     FeeScheduleFormat,
     FeeScheduleSnapshot,
+    FeeTier,
     NormalizedFee,
     ScrapedDocument,
     ScrapeLog,
@@ -63,6 +65,19 @@ def run_scrape_pipeline(exchange_code: str, session: Session) -> ChangeReport | 
         logger.info(f"[{exchange_code}] Exchange is inactive, skipping")
         return None
 
+    # --- Step (a2): Run URL discovery if needed ---
+    if exchange.discovery_status != DiscoveryStatus.DISCOVERED:
+        logger.info(f"[{exchange_code}] URLs not yet discovered, running discovery first...")
+        from exnot.discovery.pipeline import run_discovery_pipeline
+
+        success = run_discovery_pipeline(exchange_code, session)
+        session.flush()
+        if not success:
+            logger.error(f"[{exchange_code}] Discovery failed, cannot proceed with scrape")
+            _record_scrape_log(exchange, session, ScrapeStatus.FAILED, error_message="URL discovery failed")
+            return None
+        session.refresh(exchange)
+
     # --- Step (b): Collect documents (async scraper, bridged via asyncio.run) ---
     logger.info(f"[{exchange_code}] Starting document collection from {exchange.fee_schedule_url}")
     collection = _collect_documents(exchange)
@@ -99,8 +114,17 @@ def run_scrape_pipeline(exchange_code: str, session: Session) -> ChangeReport | 
     # --- Step (d2): Store all documents in MinIO + create ScrapedDocument records ---
     _store_documents(exchange, snapshot, collection, session)
 
-    # --- Step (e): Parse primary document ---
+    # --- Step (e): Parse primary document + supplementary docs for full context ---
     extracted = _parse_document(exchange, collection.primary)
+
+    # When primary is CSV, also parse the HTML version for tier details and footnotes
+    if collection.primary.is_csv:
+        supplementary = _parse_supplementary_html(exchange, collection)
+        if supplementary:
+            extracted = _merge_extracted_documents(extracted, supplementary)
+            logger.info(f"[{exchange_code}] Merged HTML supplement ({len(supplementary.tables)} tables, "
+                        f"{len(supplementary.full_text)} chars) with CSV primary")
+
     snapshot.raw_text = extracted.full_text
     snapshot.status = SnapshotStatus.PARSED
     session.flush()
@@ -253,6 +277,92 @@ def _parse_document(exchange: Exchange, doc_result: DocumentResult) -> Extracted
     return parser.extract(doc_result.content_bytes)
 
 
+def _parse_supplementary_html(
+    exchange: Exchange, collection: CollectionResult
+) -> ExtractedDocument | None:
+    """Find and parse an HTML document from the collection to supplement CSV data."""
+    from exnot.scraper.base import ContentType
+
+    for doc in collection.documents:
+        if doc.content_type == ContentType.HTML and doc.content_hash != collection.primary.content_hash:
+            logger.info(f"[{exchange.code}] Parsing supplementary HTML from {doc.source_url}")
+            parser = HtmlParser()
+            return parser.extract(doc.content_bytes)
+
+    logger.info(f"[{exchange.code}] No supplementary HTML document found in collection")
+    return None
+
+
+def _merge_extracted_documents(
+    primary: ExtractedDocument, supplementary: ExtractedDocument
+) -> ExtractedDocument:
+    """Merge a supplementary document into the primary, combining text and tables."""
+    merged_text = (
+        primary.full_text
+        + "\n\n--- SUPPLEMENTARY HTML PAGE (use this for tier conditions, footnotes, "
+        "and contra-party details to ENRICH the fees above — do NOT create separate "
+        "fee entries from this section alone; instead attach tier_group, tier_number, "
+        "tier_conditions, contra_party_type, and conditions to the matching CSV fees) ---\n\n"
+        + supplementary.full_text
+    )
+    merged_tables = primary.tables + supplementary.tables
+    merged_metadata = {**primary.metadata, "supplementary_tables": len(supplementary.tables)}
+
+    return ExtractedDocument(
+        full_text=merged_text,
+        tables=merged_tables,
+        page_count=primary.page_count,
+        metadata=merged_metadata,
+    )
+
+
+def _save_fee_tiers(
+    exchange: Exchange,
+    snapshot: FeeScheduleSnapshot,
+    schedule: NormalizedFeeSchedule,
+    session: Session,
+) -> dict[str, dict[int, FeeTier]]:
+    """Create FeeTier records from tier groups found in the schedule.
+
+    Returns a nested dict: tier_group -> tier_number -> FeeTier ORM object.
+    """
+    tier_map: dict[str, dict[int, FeeTier]] = {}
+
+    for entry in schedule.fees:
+        if not entry.tier_group or entry.tier_number is None:
+            continue
+        group = entry.tier_group
+        num = entry.tier_number
+        if group not in tier_map:
+            tier_map[group] = {}
+        if num in tier_map[group]:
+            continue  # Already created this tier
+
+        conditions = {}
+        if entry.tier_conditions:
+            conditions = entry.tier_conditions.model_dump()
+
+        tier = FeeTier(
+            snapshot_id=snapshot.id,
+            exchange_id=exchange.id,
+            tier_group=group,
+            tier_number=num,
+            tier_name=f"{group} Tier {num}",
+            conditions=conditions,
+            is_retroactive=True,
+            notes=entry.notes,
+        )
+        session.add(tier)
+        tier_map[group][num] = tier
+
+    if tier_map:
+        session.flush()
+        total = sum(len(tiers) for tiers in tier_map.values())
+        logger.info(f"[{exchange.code}] Saved {total} fee tier records")
+
+    return tier_map
+
+
 def _save_normalized_fees(
     exchange: Exchange,
     snapshot: FeeScheduleSnapshot,
@@ -260,8 +370,23 @@ def _save_normalized_fees(
     session: Session,
 ) -> list[NormalizedFee]:
     """Persist NormalizedFee ORM records to the database."""
+    # First, create FeeTier records and build a lookup
+    tier_map = _save_fee_tiers(exchange, snapshot, schedule, session)
+
     db_fees = []
     for entry in schedule.fees:
+        # Resolve tier_id from the tier_map
+        tier_id = None
+        if entry.tier_group and entry.tier_number is not None:
+            tier_obj = tier_map.get(entry.tier_group, {}).get(entry.tier_number)
+            if tier_obj:
+                tier_id = tier_obj.id
+
+        # Serialize conditions to JSONB
+        conditions = None
+        if entry.conditions:
+            conditions = entry.conditions
+
         fee = NormalizedFee(
             snapshot_id=snapshot.id,
             exchange_id=exchange.id,
@@ -271,11 +396,21 @@ def _save_normalized_fees(
             fee_type=entry.fee_type.value,
             amount_cents=entry.amount_cents,
             is_rebate=entry.is_rebate,
+            fee_code=entry.fee_code,
+            contra_party_type=entry.contra_party_type.value if entry.contra_party_type else None,
+            symbol=entry.symbol,
+            fee_unit=entry.fee_unit.value if entry.fee_unit else "PER_CONTRACT",
+            tier_id=tier_id,
+            routing_destination=entry.routing_destination,
+            conditions=conditions,
+            effective_date=entry.effective_date,
+            expiry_date=entry.expiry_date,
+            section_ref=entry.section_ref,
+            notes=entry.notes,
+            # Legacy fields
             volume_tier=entry.volume_tier,
             tier_threshold_pct=entry.tier_threshold_pct,
             tier_threshold_contracts=entry.tier_threshold_contracts,
-            effective_date=entry.effective_date,
-            notes=entry.notes,
         )
         db_fees.append(fee)
 

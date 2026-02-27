@@ -3,7 +3,7 @@
 from decimal import Decimal
 
 from exnot.normalizer.engine import NormalizationEngine
-from exnot.normalizer.schema import FeeType, ParticipantType, SecurityClass
+from exnot.normalizer.schema import FeeType, FeeUnit, ParticipantType, SecurityClass
 from exnot.parser.ai_extractor import ExtractionResult
 
 
@@ -129,3 +129,124 @@ class TestNormalizationEngine:
 
         schedule = self.engine.normalize(extraction, "TEST")
         assert schedule.fees[0].security_class == SecurityClass.EQUITY
+
+    def test_v2_schema_fields(self):
+        """Test that V2 schema supports new fields."""
+        from exnot.normalizer.schema import NormalizedFeeEntry
+
+        entry = NormalizedFeeEntry(
+            exchange_code="CBOE_BZX",
+            fee_code="ZA",
+            participant_type=ParticipantType.CUSTOMER,
+            contra_party_type=ParticipantType.NON_CUSTOMER,
+            security_class=SecurityClass.PENNY,
+            symbol=None,
+            order_type="COMPLEX",
+            fee_type=FeeType.MAKER,
+            fee_unit=FeeUnit.PER_CONTRACT,
+            amount=Decimal("-0.40"),
+            is_rebate=True,
+            routing_destination=None,
+            tier_group="complex_customer_penny",
+            tier_number=0,
+            conditions={"footnotes": ["10"]},
+            section_ref="Complex Orders",
+        )
+        assert entry.fee_code == "ZA"
+        assert entry.contra_party_type == ParticipantType.NON_CUSTOMER
+        assert entry.fee_unit == FeeUnit.PER_CONTRACT
+        assert entry.conditions == {"footnotes": ["10"]}
+
+    def test_v2_normalize_with_tiers(self):
+        """Test V2 normalization with tier groups."""
+        extraction = ExtractionResult(
+            raw_fees=[
+                {
+                    "fee_code": "PY",
+                    "participant_type": "CUSTOMER",
+                    "contra_party_type": None,
+                    "security_class": "PENNY",
+                    "order_type": "SIMPLE",
+                    "fee_type": "MAKER",
+                    "fee_unit": "PER_CONTRACT",
+                    "amount": -0.25,
+                    "is_rebate": True,
+                    "tier_group": "customer_penny_add",
+                    "tier_number": 0,
+                    "section_ref": "Transaction Fees",
+                },
+                {
+                    "fee_code": "PY",
+                    "participant_type": "CUSTOMER",
+                    "contra_party_type": None,
+                    "security_class": "PENNY",
+                    "order_type": "SIMPLE",
+                    "fee_type": "MAKER",
+                    "fee_unit": "PER_CONTRACT",
+                    "amount": -0.47,
+                    "is_rebate": True,
+                    "tier_group": "customer_penny_add",
+                    "tier_number": 2,
+                    "tier_conditions": {
+                        "logic": "OR",
+                        "criteria": [
+                            {"metric": "ADV", "operator": ">=", "value": 0.01,
+                             "unit": "PCT_OCV", "description": "ADV >= 1.00% OCV"}
+                        ]
+                    },
+                    "section_ref": "Transaction Fees, Footnote 1",
+                },
+                {
+                    "fee_code": "ZA",
+                    "participant_type": "CUSTOMER",
+                    "contra_party_type": "NON_CUSTOMER",
+                    "security_class": "PENNY",
+                    "order_type": "COMPLEX",
+                    "fee_type": "MAKER",
+                    "fee_unit": "PER_CONTRACT",
+                    "amount": -0.40,
+                    "is_rebate": True,
+                    "conditions": {"footnotes": ["10"]},
+                    "section_ref": "Complex Orders",
+                },
+            ],
+            exchange_name="Cboe BZX",
+            confidence=0.95,
+        )
+
+        schedule = self.engine.normalize(extraction, "CBOE_BZX")
+
+        assert len(schedule.fees) == 3
+        # Base tier
+        assert schedule.fees[0].fee_code == "PY"
+        assert schedule.fees[0].tier_number == 0
+        assert schedule.fees[0].tier_conditions is None
+        # Volume tier
+        assert schedule.fees[1].tier_number == 2
+        assert schedule.fees[1].tier_conditions is not None
+        assert schedule.fees[1].tier_conditions.logic == "OR"
+        # Contra-party
+        assert schedule.fees[2].contra_party_type == ParticipantType.NON_CUSTOMER
+        assert schedule.fees[2].fee_code == "ZA"
+
+    def test_v2_normalize_contra_party(self):
+        """Test V2 normalization preserves contra-party type."""
+        extraction = ExtractionResult(
+            raw_fees=[
+                {
+                    "participant_type": "CUSTOMER",
+                    "contra_party_type": "CUSTOMER",
+                    "security_class": "PENNY",
+                    "order_type": "COMPLEX",
+                    "fee_type": "MAKER",
+                    "amount": 0.00,
+                    "is_rebate": False,
+                    "notes": "Customer vs Customer, free",
+                },
+            ],
+            confidence=0.9,
+        )
+
+        schedule = self.engine.normalize(extraction, "TEST")
+        assert len(schedule.fees) == 1
+        assert schedule.fees[0].contra_party_type == ParticipantType.CUSTOMER

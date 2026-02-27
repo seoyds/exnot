@@ -4,12 +4,14 @@ from celery.schedules import crontab
 
 from exnot.workers.celery_app import celery_app
 
+# Auto-scraping disabled — trigger scrapes manually via admin API or CLI.
+# To re-enable, uncomment the daily_fee_check entry below.
 celery_app.conf.beat_schedule = {
-    "daily_fee_check": {
-        "task": "exnot.workers.tasks.daily_fee_schedule_check",
-        "schedule": crontab(hour=6, minute=0),  # 6:00 AM ET daily
-        "options": {"queue": "default"},
-    },
+    # "daily_fee_check": {
+    #     "task": "exnot.workers.tasks.daily_fee_schedule_check",
+    #     "schedule": crontab(hour=6, minute=0),  # 6:00 AM ET daily
+    #     "options": {"queue": "default"},
+    # },
     "daily_digest": {
         "task": "exnot.workers.tasks.send_daily_digest",
         "schedule": crontab(hour=7, minute=0),  # 7:00 AM ET daily

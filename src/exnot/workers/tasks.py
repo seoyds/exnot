@@ -15,6 +15,7 @@ from sqlalchemy import delete, select
 
 from exnot.db.engine import get_sync_session
 from exnot.db.models import (
+    DiscoveryStatus,
     Exchange,
     FeeChange,
     NotificationFrequency,
@@ -58,6 +59,72 @@ def daily_fee_schedule_check():
     except Exception:
         logger.exception("Error in daily_fee_schedule_check")
         raise
+    finally:
+        session.close()
+
+
+# ---------------------------------------------------------------------------
+# Task: discover_exchange_urls
+# ---------------------------------------------------------------------------
+
+
+@celery_app.task(
+    name="exnot.workers.tasks.discover_exchange_urls",
+    bind=True,
+    max_retries=2,
+    default_retry_delay=120,
+    rate_limit="3/m",
+)
+def discover_exchange_urls(self, exchange_code: str, force: bool = False):
+    """Discover fee schedule URLs for a single exchange via web search + AI."""
+    logger.info(f"[{exchange_code}] Starting URL discovery task")
+    session = get_sync_session()
+    try:
+        from exnot.discovery.pipeline import run_discovery_pipeline
+
+        success = run_discovery_pipeline(exchange_code, session, force=force)
+        session.commit()
+        return {"exchange_code": exchange_code, "success": success}
+    except Exception as exc:
+        session.rollback()
+        logger.exception(f"[{exchange_code}] Discovery failed")
+        raise self.retry(exc=exc)
+    finally:
+        session.close()
+
+
+@celery_app.task(name="exnot.workers.tasks.discover_all_exchange_urls")
+def discover_all_exchange_urls(force: bool = False):
+    """Discover URLs for all exchanges that need discovery."""
+    session = get_sync_session()
+    try:
+        if force:
+            exchanges = (
+                session.execute(select(Exchange).where(Exchange.is_active.is_(True))).scalars().all()
+            )
+        else:
+            exchanges = (
+                session.execute(
+                    select(Exchange).where(
+                        Exchange.is_active.is_(True),
+                        Exchange.discovery_status.in_([
+                            DiscoveryStatus.NOT_DISCOVERED,
+                            DiscoveryStatus.FAILED,
+                            DiscoveryStatus.STALE,
+                        ]),
+                    )
+                )
+                .scalars()
+                .all()
+            )
+
+        codes = [ex.code for ex in exchanges]
+        logger.info(f"Dispatching discovery for {len(codes)} exchanges: {codes}")
+
+        for code in codes:
+            discover_exchange_urls.delay(code, force=force)
+
+        return {"dispatched": codes}
     finally:
         session.close()
 

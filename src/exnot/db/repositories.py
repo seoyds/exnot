@@ -116,6 +116,7 @@ class NormalizedFeeRepository:
         stmt = (
             select(NormalizedFee)
             .where(NormalizedFee.snapshot_id == snapshot_id)
+            .options(selectinload(NormalizedFee.tier))
             .order_by(
                 NormalizedFee.participant_type,
                 NormalizedFee.security_class,
