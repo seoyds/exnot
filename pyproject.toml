@@ -33,7 +33,7 @@ dependencies = [
     # AI/LLM
     "anthropic>=0.40.0",
     # Configuration
-    "pydantic>=2.10.0",
+    "pydantic[email]>=2.10.0",
     "pydantic-settings>=2.7.0",
     # Email
     "aiosmtplib>=3.0.0",

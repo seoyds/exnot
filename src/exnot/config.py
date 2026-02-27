@@ -42,7 +42,7 @@ class Settings(BaseSettings):
 
     # AI
     ai_model: str = "claude-sonnet-4-20250514"
-    ai_max_tokens: int = 8192
+    ai_max_tokens: int = 32768
     ai_confidence_threshold: float = 0.8
     ai_max_retries: int = 3
 

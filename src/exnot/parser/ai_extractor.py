@@ -10,6 +10,7 @@ Implements a multi-stage agentic pipeline:
 
 import json
 import logging
+import time
 from dataclasses import dataclass, field
 
 import anthropic
@@ -128,6 +129,23 @@ class AIExtractor:
         self.confidence_threshold = settings.ai_confidence_threshold
         self.max_retries = settings.ai_max_retries
 
+    def _call_api(self, messages: list[dict]) -> tuple[str, str]:
+        """Call Claude API using streaming to avoid timeout on large responses.
+
+        Returns (response_text, stop_reason) tuple.
+        """
+        text_parts = []
+        stop_reason = ""
+        with self.client.messages.stream(
+            model=self.model,
+            max_tokens=self.max_tokens,
+            messages=messages,
+        ) as stream:
+            for text in stream.text_stream:
+                text_parts.append(text)
+            stop_reason = stream.get_final_message().stop_reason
+        return "".join(text_parts), stop_reason
+
     def extract(self, document: ExtractedDocument, exchange_code: str) -> ExtractionResult:
         """Run the full multi-stage extraction pipeline."""
         result = ExtractionResult()
@@ -136,6 +154,10 @@ class AIExtractor:
         logger.info(f"[{exchange_code}] Stage 2: Running structural analysis...")
         result.structural_analysis = self._structural_analysis(document)
         result.ai_calls_made += 1
+
+        # Brief pause between AI calls to stay within rate limits
+        logger.info(f"[{exchange_code}] Waiting 65s for rate limit window reset...")
+        time.sleep(65)
 
         # Stage 3: Fee data extraction
         logger.info(f"[{exchange_code}] Stage 3: Extracting fee data...")
@@ -163,6 +185,8 @@ class AIExtractor:
             if not issues:
                 break
 
+            logger.info(f"[{exchange_code}] Waiting 65s for rate limit window reset...")
+            time.sleep(65)
             corrections = self._self_question(document, result, issues)
             result.ai_calls_made += 1
             result = self._apply_corrections(result, corrections)
@@ -187,20 +211,16 @@ class AIExtractor:
             if len(table.rows) > 5:
                 tables_text += f"  ... ({len(table.rows)} total rows)\n"
 
-        # Truncate full text to fit context
-        full_text = document.full_text[:15000]
+        # Truncate full text to fit context (keep small for rate-limited APIs)
+        full_text = document.full_text[:8000]
 
         content = f"DOCUMENT TEXT:\n{full_text}\n\nEXTRACTED TABLES:\n{tables_text}"
 
-        response = self.client.messages.create(
-            model=self.model,
-            max_tokens=self.max_tokens,
-            messages=[
-                {"role": "user", "content": f"{STRUCTURAL_ANALYSIS_PROMPT}\n\n{content}"}
-            ],
-        )
+        text, _ = self._call_api([
+            {"role": "user", "content": f"{STRUCTURAL_ANALYSIS_PROMPT}\n\n{content}"}
+        ])
 
-        return self._parse_json_response(response.content[0].text)
+        return self._parse_json_response(text)
 
     def _extract_fees(self, document: ExtractedDocument, structure: dict) -> dict:
         """Stage 3: Extract structured fee data."""
@@ -214,7 +234,7 @@ class AIExtractor:
             if table.footnotes:
                 tables_text += f"Footnotes: {table.footnotes}\n"
 
-        full_text = document.full_text[:20000]
+        full_text = document.full_text[:10000]
 
         context = (
             f"STRUCTURAL ANALYSIS:\n{json.dumps(structure, indent=2)}\n\n"
@@ -222,15 +242,14 @@ class AIExtractor:
             f"EXTRACTED TABLES:\n{tables_text}"
         )
 
-        response = self.client.messages.create(
-            model=self.model,
-            max_tokens=self.max_tokens,
-            messages=[
-                {"role": "user", "content": f"{FEE_EXTRACTION_PROMPT}\n\n{context}"}
-            ],
-        )
+        text, stop_reason = self._call_api([
+            {"role": "user", "content": f"{FEE_EXTRACTION_PROMPT}\n\n{context}"}
+        ])
 
-        return self._parse_json_response(response.content[0].text)
+        if stop_reason == "max_tokens":
+            logger.warning("Fee extraction response was truncated by max_tokens limit")
+
+        return self._parse_json_response(text)
 
     def _compute_confidence(self, result: ExtractionResult, document: ExtractedDocument) -> float:
         """Stage 4: Compute confidence score for the extraction."""
@@ -313,16 +332,12 @@ class AIExtractor:
             issues=issues,
         )
 
-        full_text = document.full_text[:20000]
+        full_text = document.full_text[:10000]
         content = f"{prompt}\n\nDOCUMENT TEXT:\n{full_text}"
 
-        response = self.client.messages.create(
-            model=self.model,
-            max_tokens=self.max_tokens,
-            messages=[{"role": "user", "content": content}],
-        )
+        text, _ = self._call_api([{"role": "user", "content": content}])
 
-        return self._parse_json_response(response.content[0].text)
+        return self._parse_json_response(text)
 
     def _apply_corrections(self, result: ExtractionResult, corrections: dict) -> ExtractionResult:
         """Apply corrections from self-questioning to the extraction result."""
@@ -340,18 +355,18 @@ class AIExtractor:
         return result
 
     def _parse_json_response(self, text: str) -> dict:
-        """Parse JSON from Claude's response, handling markdown code blocks."""
+        """Parse JSON from Claude's response, handling markdown code blocks and truncation."""
         # Strip markdown code fences if present
         text = text.strip()
         if text.startswith("```"):
             lines = text.split("\n")
-            # Remove first and last lines (```json and ```)
             lines = [line for line in lines if not line.strip().startswith("```")]
             text = "\n".join(lines)
 
         try:
             return json.loads(text)
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
+            logger.warning(f"Initial JSON parse failed: {e}")
             # Try to find JSON within the text
             start = text.find("{")
             end = text.rfind("}") + 1
@@ -361,5 +376,35 @@ class AIExtractor:
                 except json.JSONDecodeError:
                     pass
 
-            logger.error(f"Failed to parse JSON from AI response: {text[:200]}...")
+            # Handle truncated JSON by finding the last complete fee object in the array
+            if start >= 0:
+                result = self._salvage_truncated_json(text[start:])
+                if result:
+                    return result
+
+            logger.error(f"Failed to parse JSON from AI response (len={len(text)}): {text[:300]}...")
             return {}
+
+    def _salvage_truncated_json(self, text: str) -> dict | None:
+        """Attempt to recover partial data from truncated JSON responses."""
+        # Find the last complete object boundary ("},") in the fees array
+        # then close the array and outer object
+        last_complete = text.rfind("},")
+        if last_complete < 0:
+            return None
+
+        # Take up to and including the last complete object
+        partial = text[:last_complete + 1]
+
+        # Try closing with various suffixes to match the structure
+        for suffix in ['\n  ],\n  "extraction_notes": "Truncated response"\n}',
+                       ']}', ']\n}']:
+            try:
+                result = json.loads(partial + suffix)
+                fee_count = len(result.get("fees", result.get("corrections", [])))
+                logger.warning(f"Salvaged truncated JSON with {fee_count} entries")
+                return result
+            except json.JSONDecodeError:
+                continue
+
+        return None

@@ -1,7 +1,7 @@
 """Fee normalization engine - converts AI-extracted raw fees into canonical schema."""
 
 import logging
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
 from exnot.normalizer.schema import (
@@ -96,6 +96,7 @@ FEE_TYPE_MAPPINGS: dict[str, FeeType] = {
     "transaction": FeeType.TRANSACTION,
     "section 31": FeeType.TRANSACTION,
     "taf": FeeType.TRANSACTION,
+    "auction": FeeType.TRANSACTION,
     "clearing": FeeType.CLEARING,
     "comparison": FeeType.CLEARING,
     "connectivity": FeeType.CONNECTIVITY,
@@ -126,10 +127,7 @@ class NormalizationEngine:
         # Parse effective date
         effective_date = None
         if extraction.effective_date:
-            try:
-                effective_date = date.fromisoformat(extraction.effective_date)
-            except (ValueError, TypeError):
-                logger.warning(f"Could not parse effective date: {extraction.effective_date}")
+            effective_date = self._parse_date(extraction.effective_date)
 
         schedule = NormalizedFeeSchedule(
             exchange_code=exchange_code,
@@ -154,7 +152,11 @@ class NormalizationEngine:
         fee_type = self._map_fee_type(raw.get("fee_type", ""))
 
         if not participant_type or not fee_type:
-            logger.debug(f"Skipping fee with unmappable type: {raw}")
+            logger.warning(
+                f"Skipping fee with unmappable type: "
+                f"participant={raw.get('participant_type')!r} -> {participant_type}, "
+                f"fee_type={raw.get('fee_type')!r} -> {fee_type}"
+            )
             return None
 
         # Parse amount
@@ -223,3 +225,22 @@ class NormalizationEngine:
             pass
         key = value.lower().strip()
         return FEE_TYPE_MAPPINGS.get(key)
+
+    @staticmethod
+    def _parse_date(date_str: str) -> date | None:
+        """Parse dates in various formats (ISO, natural language, etc.)."""
+        if not date_str:
+            return None
+        # Try ISO format first
+        try:
+            return date.fromisoformat(date_str)
+        except (ValueError, TypeError):
+            pass
+        # Try common natural language formats
+        for fmt in ("%B %d, %Y", "%b %d, %Y", "%m/%d/%Y", "%d %B %Y"):
+            try:
+                return datetime.strptime(date_str, fmt).date()
+            except (ValueError, TypeError):
+                continue
+        logger.warning(f"Could not parse effective date: {date_str}")
+        return None
