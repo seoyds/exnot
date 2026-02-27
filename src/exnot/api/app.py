@@ -62,6 +62,14 @@ if static_dir.exists():
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 
+@app.get("/")
+async def root():
+    """Redirect root to dashboard."""
+    from fastapi.responses import RedirectResponse
+
+    return RedirectResponse(url="/dashboard")
+
+
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "version": "0.1.0"}
