@@ -12,6 +12,18 @@
 {% endblock %}
 
 {% block content %}
+{% if success %}
+<div class="mb-6 rounded-lg bg-green-50 border border-green-200 p-4">
+    <div class="flex">
+        <svg class="h-5 w-5 text-green-400 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd" />
+        </svg>
+        <div class="ml-3">
+            <p class="text-sm font-medium text-green-800">{{ success }}</p>
+        </div>
+    </div>
+</div>
+{% endif %}
 {% if error %}
 <div class="mb-6 rounded-lg bg-red-50 border border-red-200 p-4">
     <div class="flex">
@@ -33,7 +45,21 @@
          hx-select="#exchange-grid"
          hx-swap="outerHTML">
     <div class="flex items-center justify-between mb-4">
-        <h2 class="text-xl font-semibold text-slate-800">Exchanges</h2>
+        <div class="flex items-center gap-3">
+            <h2 class="text-xl font-semibold text-slate-800">Exchanges</h2>
+            {% if user and user.is_admin %}
+            <form method="post" action="/dashboard/scrape-all" class="inline"
+                  onsubmit="this.querySelector('button').disabled=true; this.querySelector('button').textContent='Triggering...'">
+                <button type="submit"
+                        class="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-blue-500 transition-colors">
+                    <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182" />
+                    </svg>
+                    Scrape All
+                </button>
+            </form>
+            {% endif %}
+        </div>
         <span class="htmx-indicator text-sm text-slate-400">
             <svg class="animate-spin h-4 w-4 inline mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -44,62 +70,71 @@
     </div>
 
     {% if exchange_data %}
-    <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {% for item in exchange_data %}
-        <a href="/dashboard/exchanges/{{ item.exchange.code }}"
-           class="group block rounded-lg bg-white shadow-sm border border-slate-200 hover:shadow-md hover:border-blue-300 transition-all duration-200 overflow-hidden">
-            <div class="p-5">
-                <div class="flex items-center justify-between mb-3">
-                    <h3 class="text-lg font-semibold text-slate-900 group-hover:text-blue-600 transition-colors truncate"
-                        title="{{ item.exchange.name }}">
-                        {{ item.exchange.code }}
-                    </h3>
-                    <!-- Status Badge -->
-                    {% if item.status == 'VERIFIED' or item.status == 'NORMALIZED' %}
-                    <span class="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800">
-                        <span class="mr-1.5 h-1.5 w-1.5 rounded-full bg-green-500 inline-block"></span>
-                        {{ item.status }}
-                    </span>
-                    {% elif item.status == 'PARSED' or item.status == 'PENDING' %}
-                    <span class="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800">
-                        <span class="mr-1.5 h-1.5 w-1.5 rounded-full bg-amber-500 inline-block"></span>
-                        {{ item.status }}
-                    </span>
-                    {% elif item.status == 'FAILED' %}
-                    <span class="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-800">
-                        <span class="mr-1.5 h-1.5 w-1.5 rounded-full bg-red-500 inline-block"></span>
-                        {{ item.status }}
-                    </span>
-                    {% else %}
-                    <span class="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">
-                        <span class="mr-1.5 h-1.5 w-1.5 rounded-full bg-slate-400 inline-block"></span>
-                        {{ item.status }}
-                    </span>
-                    {% endif %}
-                </div>
-
-                <p class="text-sm text-slate-600 truncate" title="{{ item.exchange.name }}">{{ item.exchange.name }}</p>
-                <p class="text-xs text-slate-400 mt-1">{{ item.exchange.operator }}</p>
-
-                <div class="mt-4 flex items-center justify-between border-t border-slate-100 pt-3">
-                    <div>
-                        <span class="text-xs text-slate-500 uppercase tracking-wider">Version</span>
-                        <p class="text-sm font-medium text-slate-900">v{{ item.version }}</p>
-                    </div>
-                    <div class="text-right">
-                        <span class="text-xs text-slate-500 uppercase tracking-wider">Last Updated</span>
-                        <p class="text-sm font-medium text-slate-900">
-                            {% if item.last_updated %}
-                            {{ item.last_updated.strftime('%Y-%m-%d') }}
-                            {% else %}
-                            <span class="text-slate-400">Never</span>
-                            {% endif %}
-                        </p>
-                    </div>
-                </div>
-            </div>
-        </a>
-        {% endfor %}
+    <div class="overflow-hidden rounded-lg bg-white shadow-sm border border-slate-200">
+        <table class="min-w-full divide-y divide-slate-200">
+            <thead class="bg-slate-50">
+                <tr>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Code</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Exchange Name</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Operator</th>
+                    <th scope="col" class="px-6 py-3 text-center text-xs font-medium uppercase tracking-wider text-slate-500">Status</th>
+                    <th scope="col" class="px-6 py-3 text-center text-xs font-medium uppercase tracking-wider text-slate-500">Version</th>
+                    <th scope="col" class="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-slate-500">Last Updated</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-200 bg-white">
+                {% for item in exchange_data %}
+                <tr class="hover:bg-slate-50 transition-colors cursor-pointer"
+                    onclick="window.location='/dashboard/exchanges/{{ item.exchange.code }}'">
+                    <td class="whitespace-nowrap px-6 py-4">
+                        <a href="/dashboard/exchanges/{{ item.exchange.code }}"
+                           class="text-sm font-semibold text-blue-600 hover:text-blue-500">
+                            {{ item.exchange.code }}
+                        </a>
+                    </td>
+                    <td class="px-6 py-4 text-sm text-slate-900" title="{{ item.exchange.name }}">
+                        {{ item.exchange.name }}
+                    </td>
+                    <td class="px-6 py-4 text-sm text-slate-500">
+                        {{ item.exchange.operator }}
+                    </td>
+                    <td class="whitespace-nowrap px-6 py-4 text-center">
+                        {% if item.status == 'VERIFIED' or item.status == 'NORMALIZED' %}
+                        <span class="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800">
+                            <span class="mr-1.5 h-1.5 w-1.5 rounded-full bg-green-500 inline-block"></span>
+                            {{ item.status }}
+                        </span>
+                        {% elif item.status == 'PARSED' or item.status == 'PENDING' %}
+                        <span class="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800">
+                            <span class="mr-1.5 h-1.5 w-1.5 rounded-full bg-amber-500 inline-block"></span>
+                            {{ item.status }}
+                        </span>
+                        {% elif item.status == 'FAILED' %}
+                        <span class="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-800">
+                            <span class="mr-1.5 h-1.5 w-1.5 rounded-full bg-red-500 inline-block"></span>
+                            {{ item.status }}
+                        </span>
+                        {% else %}
+                        <span class="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">
+                            <span class="mr-1.5 h-1.5 w-1.5 rounded-full bg-slate-400 inline-block"></span>
+                            {{ item.status }}
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td class="whitespace-nowrap px-6 py-4 text-center text-sm font-medium text-slate-900">
+                        v{{ item.version }}
+                    </td>
+                    <td class="whitespace-nowrap px-6 py-4 text-right text-sm text-slate-500">
+                        {% if item.last_updated %}
+                        {{ item.last_updated.strftime('%Y-%m-%d') }}
+                        {% else %}
+                        <span class="text-slate-400">Never</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
     {% else %}
     <div class="rounded-lg bg-white shadow-sm border border-slate-200 p-8 text-center">

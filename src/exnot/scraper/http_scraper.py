@@ -58,8 +58,11 @@ class HttpScraper(AbstractScraper):
 
     def _detect_content_type(self, response: httpx.Response) -> ContentType:
         ct = response.headers.get("content-type", "").lower()
+        url = str(response.url).lower()
         if "pdf" in ct or response.content[:5] == b"%PDF-":
             return ContentType.PDF
+        if "csv" in ct or url.endswith(".csv") or "csv=true" in url:
+            return ContentType.CSV
         if "html" in ct:
             return ContentType.HTML
         if "spreadsheet" in ct or "excel" in ct:

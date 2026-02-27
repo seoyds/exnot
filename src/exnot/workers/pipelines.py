@@ -20,6 +20,7 @@ from exnot.db.models import (
     FeeScheduleFormat,
     FeeScheduleSnapshot,
     NormalizedFee,
+    ScrapedDocument,
     ScrapeLog,
     ScrapeStatus,
     SnapshotStatus,
@@ -28,10 +29,12 @@ from exnot.differ.detector import ChangeDetector, ChangeReport
 from exnot.normalizer.schema import NormalizedFeeSchedule
 from exnot.parser.ai_extractor import AIExtractor
 from exnot.parser.base import ExtractedDocument
+from exnot.parser.csv_parser import CsvParser
 from exnot.parser.html_parser import HtmlParser
 from exnot.parser.pdf_parser import PdfParser
-from exnot.scraper.base import DocumentResult
+from exnot.scraper.base import CollectionResult, DocumentResult
 from exnot.scraper.document import DocumentCollector
+from exnot.storage.minio_client import DocumentStorage
 
 logger = logging.getLogger(__name__)
 
@@ -60,23 +63,23 @@ def run_scrape_pipeline(exchange_code: str, session: Session) -> ChangeReport | 
         logger.info(f"[{exchange_code}] Exchange is inactive, skipping")
         return None
 
-    # --- Step (b): Collect document (async scraper, bridged via asyncio.run) ---
+    # --- Step (b): Collect documents (async scraper, bridged via asyncio.run) ---
     logger.info(f"[{exchange_code}] Starting document collection from {exchange.fee_schedule_url}")
-    doc_result = _collect_document(exchange)
+    collection = _collect_documents(exchange)
 
-    # --- Step (c): Compare hash with latest snapshot ---
+    # --- Step (c): Compare hash with latest snapshot (uses primary doc hash) ---
     latest_snapshot = _get_latest_snapshot(exchange, session)
     latest_hash = latest_snapshot.source_hash if latest_snapshot else None
 
-    if latest_hash == doc_result.content_hash:
-        logger.info(f"[{exchange_code}] Document unchanged (hash: {doc_result.content_hash[:12]}...)")
-        _record_scrape_log(exchange, session, ScrapeStatus.NO_CHANGE, doc_result.content_hash)
+    if latest_hash == collection.primary_hash:
+        logger.info(f"[{exchange_code}] Document unchanged (hash: {collection.primary_hash[:12]}...)")
+        _record_scrape_log(exchange, session, ScrapeStatus.NO_CHANGE, collection.primary_hash)
         return None
 
     logger.info(
         f"[{exchange_code}] Document changed! "
         f"Old hash: {latest_hash[:12] + '...' if latest_hash else 'N/A'}, "
-        f"New hash: {doc_result.content_hash[:12]}..."
+        f"New hash: {collection.primary_hash[:12]}..."
     )
 
     # --- Step (d): Create new FeeScheduleSnapshot ---
@@ -84,17 +87,20 @@ def run_scrape_pipeline(exchange_code: str, session: Session) -> ChangeReport | 
     snapshot = FeeScheduleSnapshot(
         exchange_id=exchange.id,
         version=new_version,
-        source_url=doc_result.source_url,
-        source_hash=doc_result.content_hash,
-        raw_document=doc_result.content_bytes,
+        source_url=collection.primary.source_url,
+        source_hash=collection.primary_hash,
+        raw_document=None,  # Documents now stored in MinIO
         status=SnapshotStatus.PENDING,
     )
     session.add(snapshot)
     session.flush()
     logger.info(f"[{exchange_code}] Created snapshot v{new_version} (id: {snapshot.id})")
 
-    # --- Step (e): Parse document ---
-    extracted = _parse_document(exchange, doc_result)
+    # --- Step (d2): Store all documents in MinIO + create ScrapedDocument records ---
+    _store_documents(exchange, snapshot, collection, session)
+
+    # --- Step (e): Parse primary document ---
+    extracted = _parse_document(exchange, collection.primary)
     snapshot.raw_text = extracted.full_text
     snapshot.status = SnapshotStatus.PARSED
     session.flush()
@@ -149,15 +155,13 @@ def run_scrape_pipeline(exchange_code: str, session: Session) -> ChangeReport | 
     # --- Step (j): Save FeeChange records ---
     if change_report.has_changes:
         _save_fee_changes(exchange, latest_snapshot, snapshot, change_report, session)
-        snapshot.status = SnapshotStatus.VERIFIED
-    else:
-        snapshot.status = SnapshotStatus.VERIFIED
 
+    snapshot.status = SnapshotStatus.VERIFIED
     session.flush()
 
     # Record scrape log
     _record_scrape_log(
-        exchange, session, ScrapeStatus.SUCCESS, doc_result.content_hash,
+        exchange, session, ScrapeStatus.SUCCESS, collection.primary_hash,
         has_changes=change_report.has_changes,
     )
 
@@ -170,7 +174,7 @@ def run_scrape_pipeline(exchange_code: str, session: Session) -> ChangeReport | 
     return change_report
 
 
-def _collect_document(exchange: Exchange) -> DocumentResult:
+def _collect_documents(exchange: Exchange) -> CollectionResult:
     """Run the async document collector in a synchronous context."""
 
     async def _run():
@@ -181,6 +185,46 @@ def _collect_document(exchange: Exchange) -> DocumentResult:
             await collector.close()
 
     return asyncio.run(_run())
+
+
+def _store_documents(
+    exchange: Exchange,
+    snapshot: FeeScheduleSnapshot,
+    collection: CollectionResult,
+    session: Session,
+) -> None:
+    """Upload all collected documents to MinIO and create ScrapedDocument records."""
+    storage = DocumentStorage()
+
+    for doc in collection.documents:
+        filename = f"fee_schedule{doc.filename_extension}"
+        # Avoid name collisions when multiple docs share the same extension
+        existing_paths = [
+            d.storage_path for d in session.query(ScrapedDocument).filter_by(snapshot_id=snapshot.id).all()
+        ]
+        object_name = DocumentStorage.build_object_name(exchange.code, snapshot.version, filename)
+        counter = 1
+        while object_name in existing_paths:
+            base = f"fee_schedule_{counter}{doc.filename_extension}"
+            object_name = DocumentStorage.build_object_name(exchange.code, snapshot.version, base)
+            counter += 1
+
+        stored = storage.store(object_name, doc.content_bytes, content_type=doc.content_type.value)
+
+        record = ScrapedDocument(
+            snapshot_id=snapshot.id,
+            content_type=doc.content_type.value,
+            source_url=doc.source_url,
+            content_hash=doc.content_hash,
+            storage_path=stored.object_name,
+            file_size_bytes=stored.size_bytes,
+            is_primary=(doc.content_hash == collection.primary.content_hash),
+            fetched_at=doc.fetched_at,
+        )
+        session.add(record)
+
+    session.flush()
+    logger.info(f"[{exchange.code}] Stored {len(collection.documents)} document(s) in MinIO")
 
 
 def _get_latest_snapshot(exchange: Exchange, session: Session) -> FeeScheduleSnapshot | None:
@@ -196,7 +240,10 @@ def _get_latest_snapshot(exchange: Exchange, session: Session) -> FeeScheduleSna
 
 def _parse_document(exchange: Exchange, doc_result: DocumentResult) -> ExtractedDocument:
     """Choose the right parser based on content type and run extraction."""
-    if doc_result.is_pdf or exchange.fee_schedule_format == FeeScheduleFormat.PDF:
+    if doc_result.is_csv or exchange.fee_schedule_format == FeeScheduleFormat.CSV:
+        logger.info(f"[{exchange.code}] Parsing as CSV")
+        parser = CsvParser()
+    elif doc_result.is_pdf or exchange.fee_schedule_format == FeeScheduleFormat.PDF:
         logger.info(f"[{exchange.code}] Parsing as PDF")
         parser = PdfParser()
     else:

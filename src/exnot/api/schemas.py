@@ -214,6 +214,20 @@ class UserResponse(BaseModel):
 # --- Admin schemas ---
 
 
+class ScrapedDocumentResponse(BaseModel):
+    id: uuid.UUID
+    snapshot_id: uuid.UUID
+    content_type: str
+    source_url: str
+    content_hash: str
+    storage_path: str
+    file_size_bytes: int
+    is_primary: bool
+    fetched_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class ScrapeLogResponse(BaseModel):
     id: uuid.UUID
     exchange_code: str

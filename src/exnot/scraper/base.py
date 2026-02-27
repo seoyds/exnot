@@ -8,8 +8,19 @@ from enum import Enum
 class ContentType(str, Enum):
     PDF = "application/pdf"
     HTML = "text/html"
+    CSV = "text/csv"
     EXCEL = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     UNKNOWN = "unknown"
+
+
+# Priority used to pick the best format for AI extraction (higher = preferred).
+FORMAT_PRIORITY: dict[ContentType, int] = {
+    ContentType.CSV: 3,
+    ContentType.PDF: 2,
+    ContentType.HTML: 1,
+    ContentType.EXCEL: 1,
+    ContentType.UNKNOWN: 0,
+}
 
 
 @dataclass
@@ -33,6 +44,32 @@ class DocumentResult:
     @property
     def is_pdf(self) -> bool:
         return self.content_type == ContentType.PDF or self.content_bytes[:5] == b"%PDF-"
+
+    @property
+    def is_csv(self) -> bool:
+        return self.content_type == ContentType.CSV
+
+    @property
+    def filename_extension(self) -> str:
+        mapping = {
+            ContentType.PDF: ".pdf",
+            ContentType.HTML: ".html",
+            ContentType.CSV: ".csv",
+            ContentType.EXCEL: ".xlsx",
+        }
+        return mapping.get(self.content_type, ".bin")
+
+
+@dataclass(frozen=True)
+class CollectionResult:
+    """All documents collected for a single exchange scrape."""
+
+    documents: tuple[DocumentResult, ...]
+    primary: DocumentResult
+
+    @property
+    def primary_hash(self) -> str:
+        return self.primary.content_hash
 
 
 class AbstractScraper(ABC):

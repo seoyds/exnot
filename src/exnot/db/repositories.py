@@ -10,6 +10,7 @@ from exnot.db.models import (
     FeeChange,
     FeeScheduleSnapshot,
     NormalizedFee,
+    ScrapedDocument,
     ScrapeLog,
     Subscriber,
     User,
@@ -225,6 +226,34 @@ class SubscriberRepository:
         self.session.add(subscriber)
         await self.session.flush()
         return subscriber
+
+
+class ScrapedDocumentRepository:
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def get_by_id(self, doc_id: uuid.UUID) -> ScrapedDocument | None:
+        stmt = select(ScrapedDocument).where(ScrapedDocument.id == doc_id)
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def get_by_snapshot(self, snapshot_id: uuid.UUID) -> list[ScrapedDocument]:
+        stmt = (
+            select(ScrapedDocument)
+            .where(ScrapedDocument.snapshot_id == snapshot_id)
+            .order_by(ScrapedDocument.is_primary.desc(), ScrapedDocument.fetched_at)
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def get_primary(self, snapshot_id: uuid.UUID) -> ScrapedDocument | None:
+        stmt = (
+            select(ScrapedDocument)
+            .where(ScrapedDocument.snapshot_id == snapshot_id, ScrapedDocument.is_primary.is_(True))
+            .limit(1)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
 
 
 class ScrapeLogRepository:

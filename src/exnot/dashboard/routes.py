@@ -6,7 +6,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Form, Query, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,6 +27,7 @@ from exnot.db.repositories import (
     ExchangeRepository,
     FeeChangeRepository,
     NormalizedFeeRepository,
+    ScrapedDocumentRepository,
     SnapshotRepository,
     SubscriberRepository,
     UserRepository,
@@ -43,6 +44,15 @@ ALGORITHM = "HS256"
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _format_file_size(size_bytes: int) -> str:
+    """Convert bytes to a human-readable size string (KB/MB)."""
+    if size_bytes < 1024:
+        return f"{size_bytes} B"
+    if size_bytes < 1024 * 1024:
+        return f"{size_bytes / 1024:.1f} KB"
+    return f"{size_bytes / (1024 * 1024):.1f} MB"
 
 
 def _cents_to_dollars(amount_cents: int | None) -> str:
@@ -111,6 +121,8 @@ async def dashboard_overview(request: Request, db: AsyncSession = Depends(get_db
             "recent_changes": recent_changes,
             "cents_to_dollars": _cents_to_dollars,
             "user": user,
+            "success": request.query_params.get("success"),
+            "error": request.query_params.get("error"),
         },
     )
 
@@ -150,6 +162,11 @@ async def exchange_detail(
 
     versions = await snapshot_repo.get_history(exchange.id, limit=20)
 
+    documents = []
+    if latest_snapshot:
+        doc_repo = ScrapedDocumentRepository(db)
+        documents = await doc_repo.get_by_snapshot(latest_snapshot.id)
+
     user = await _get_current_user_from_cookie(request, db)
 
     return templates.TemplateResponse(
@@ -160,10 +177,124 @@ async def exchange_detail(
             "latest_snapshot": latest_snapshot,
             "fees": fees,
             "versions": versions,
+            "documents": documents,
             "cents_to_dollars": _cents_to_dollars,
+            "format_file_size": _format_file_size,
             "user": user,
+            "success": request.query_params.get("success"),
+            "error": request.query_params.get("error"),
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# Document download
+# ---------------------------------------------------------------------------
+
+
+@router.get("/dashboard/exchanges/{code}/documents/{doc_id}/download")
+async def download_document(
+    code: str,
+    doc_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Download a scraped source document from MinIO storage."""
+    import io
+    import uuid as _uuid
+
+    from exnot.storage.minio_client import DocumentStorage
+
+    try:
+        parsed_id = _uuid.UUID(doc_id)
+    except ValueError:
+        return HTMLResponse("Invalid document ID", status_code=400)
+
+    doc_repo = ScrapedDocumentRepository(db)
+    doc = await doc_repo.get_by_id(parsed_id)
+    if not doc:
+        return HTMLResponse("Document not found", status_code=404)
+
+    storage = DocumentStorage()
+    data = storage.retrieve(doc.storage_path)
+
+    # Derive filename from the storage_path (last segment)
+    filename = doc.storage_path.rsplit("/", 1)[-1] if "/" in doc.storage_path else doc.storage_path
+
+    return StreamingResponse(
+        io.BytesIO(data),
+        media_type=doc.content_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Scrape triggers
+# ---------------------------------------------------------------------------
+
+
+@router.post("/dashboard/exchanges/{code}/scrape")
+async def trigger_scrape(
+    code: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Trigger a scrape for a single exchange from the dashboard."""
+    user = await _get_current_user_from_cookie(request, db)
+    if not user or not user.is_admin:
+        return RedirectResponse(
+            url=f"/dashboard/exchanges/{code}?error=Admin+login+required",
+            status_code=303,
+        )
+
+    exchange_repo = ExchangeRepository(db)
+    exchange = await exchange_repo.get_by_code(code.upper())
+    if not exchange:
+        return RedirectResponse(
+            url=f"/dashboard?error=Exchange+{code}+not+found",
+            status_code=303,
+        )
+
+    try:
+        from exnot.workers.tasks import scrape_and_process_exchange
+
+        scrape_and_process_exchange.delay(code.upper())
+        return RedirectResponse(
+            url=f"/dashboard/exchanges/{code}?success=Scrape+triggered+for+{code.upper()}",
+            status_code=303,
+        )
+    except Exception as e:
+        return RedirectResponse(
+            url=f"/dashboard/exchanges/{code}?error=Failed+to+trigger+scrape:+{e}",
+            status_code=303,
+        )
+
+
+@router.post("/dashboard/scrape-all")
+async def trigger_scrape_all_dashboard(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Trigger a scrape for all active exchanges from the dashboard."""
+    user = await _get_current_user_from_cookie(request, db)
+    if not user or not user.is_admin:
+        return RedirectResponse(
+            url="/dashboard?error=Admin+login+required",
+            status_code=303,
+        )
+
+    try:
+        from exnot.workers.tasks import daily_fee_schedule_check
+
+        daily_fee_schedule_check.delay()
+        return RedirectResponse(
+            url="/dashboard?success=Scrape+triggered+for+all+exchanges",
+            status_code=303,
+        )
+    except Exception as e:
+        return RedirectResponse(
+            url=f"/dashboard?error=Failed+to+trigger+scrape:+{e}",
+            status_code=303,
+        )
 
 
 # ---------------------------------------------------------------------------

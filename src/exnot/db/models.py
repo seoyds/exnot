@@ -29,6 +29,7 @@ class Base(DeclarativeBase):
 class FeeScheduleFormat(str, enum.Enum):
     PDF = "PDF"
     HTML = "HTML"
+    CSV = "CSV"
     EXCEL = "EXCEL"
 
 
@@ -161,6 +162,7 @@ class FeeScheduleSnapshot(Base):
 
     exchange: Mapped["Exchange"] = relationship(back_populates="snapshots")
     normalized_fees: Mapped[list["NormalizedFee"]] = relationship(back_populates="snapshot")
+    documents: Mapped[list["ScrapedDocument"]] = relationship(back_populates="snapshot")
 
 
 class NormalizedFee(Base):
@@ -289,3 +291,21 @@ class ScrapeLog(Base):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     exchange: Mapped["Exchange"] = relationship(back_populates="scrape_logs")
+
+
+class ScrapedDocument(Base):
+    __tablename__ = "scraped_documents"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    snapshot_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("fee_schedule_snapshots.id"), nullable=False, index=True
+    )
+    content_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    source_url: Mapped[str] = mapped_column(String(500), nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    storage_path: Mapped[str] = mapped_column(String(500), nullable=False)
+    file_size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    is_primary: Mapped[bool] = mapped_column(Boolean, default=False)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    snapshot: Mapped["FeeScheduleSnapshot"] = relationship(back_populates="documents")

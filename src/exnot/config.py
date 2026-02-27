@@ -34,6 +34,13 @@ class Settings(BaseSettings):
     admin_email: str = "admin@example.com"
     admin_password: str = "changeme"
 
+    # MinIO (S3-compatible object storage)
+    minio_endpoint: str = "minio:9000"
+    minio_access_key: str = "exnot"
+    minio_secret_key: str = "exnot_dev_password"
+    minio_bucket: str = "exnot-documents"
+    minio_secure: bool = False
+
     # Scraping
     scrape_delay_seconds: float = Field(default=3.0, description="Delay between requests to same domain")
     scrape_max_retries: int = 3
