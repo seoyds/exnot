@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     user_agent: str = "ExNot/0.1.0 (US Options Fee Schedule Monitor; +https://github.com/exnot)"
 
     # AI
-    ai_model: str = "claude-sonnet-4-20250514"
+    ai_model: str = "claude-sonnet-4-6"
     ai_max_tokens: int = 32768
     ai_confidence_threshold: float = 0.8
     ai_max_retries: int = 3
