@@ -303,6 +303,27 @@
                         <span class="inline-flex items-center rounded bg-slate-50 px-1.5 py-0.5 text-[10px] text-slate-400 max-w-[160px] truncate">{{ fee.section_ref }}</span>
                         {% endif %}
                     </div>
+                    <!-- Tier conditions expandable (mobile) -->
+                    {% if fee.tier and (fee.tier.notes or (fee.tier.conditions and fee.tier.conditions.get('criteria'))) %}
+                    <details class="mt-2">
+                        <summary class="text-[10px] text-blue-600 cursor-pointer hover:text-blue-800 select-none">
+                            Tier {{ fee.tier.tier_number }} conditions
+                        </summary>
+                        <div class="mt-1.5 rounded bg-blue-50 border border-blue-100 p-2 text-[10px] text-slate-700 space-y-1">
+                            {% if fee.tier.notes %}
+                            <p class="font-medium text-slate-800">{{ fee.tier.notes }}</p>
+                            {% endif %}
+                            {% if fee.tier.conditions and fee.tier.conditions.get('criteria') %}
+                            {% for crit in fee.tier.conditions['criteria'] %}
+                            <div class="flex items-start gap-1">
+                                <span class="text-blue-400 mt-0.5">&#8226;</span>
+                                <span>{{ crit.get('description', crit.get('metric', '') ~ ' ' ~ crit.get('operator', '') ~ ' ' ~ crit.get('value', '')) }}</span>
+                            </div>
+                            {% endfor %}
+                            {% endif %}
+                        </div>
+                    </details>
+                    {% endif %}
                 </div>
                 {% endfor %}
             </div>
@@ -411,9 +432,35 @@
                                        {% if fee.is_rebate %}text-green-700{% else %}text-red-700{% endif %}">
                                 {{ cents_to_dollars(fee.amount_cents) }}
                             </td>
-                            <td class="whitespace-nowrap px-3 lg:px-4 py-3 text-sm text-slate-500">
-                                {% if fee.tier_id %}
-                                <span class="inline-flex items-center rounded bg-blue-50 px-1.5 py-0.5 text-xs font-medium text-blue-700">T{{ fee.tier.tier_number if fee.tier else '' }}</span>
+                            <td class="px-3 lg:px-4 py-3 text-sm text-slate-500">
+                                {% if fee.tier_id and fee.tier %}
+                                    {% if fee.tier.notes or (fee.tier.conditions and fee.tier.conditions.get('criteria')) %}
+                                    <details class="tier-details">
+                                        <summary class="cursor-pointer select-none list-none">
+                                            <span class="inline-flex items-center gap-1 rounded bg-blue-50 px-1.5 py-0.5 text-xs font-medium text-blue-700 hover:bg-blue-100 transition-colors">
+                                                T{{ fee.tier.tier_number }}
+                                                <svg class="h-3 w-3 tier-chevron transition-transform duration-150" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                                                </svg>
+                                            </span>
+                                        </summary>
+                                        <div class="mt-1.5 rounded bg-blue-50 border border-blue-100 p-2 text-xs text-slate-700 space-y-1 max-w-xs whitespace-normal">
+                                            {% if fee.tier.notes %}
+                                            <p class="font-medium text-slate-800">{{ fee.tier.notes }}</p>
+                                            {% endif %}
+                                            {% if fee.tier.conditions and fee.tier.conditions.get('criteria') %}
+                                            {% for crit in fee.tier.conditions['criteria'] %}
+                                            <div class="flex items-start gap-1">
+                                                <span class="text-blue-400 mt-0.5 flex-shrink-0">&#8226;</span>
+                                                <span>{{ crit.get('description', crit.get('metric', '') ~ ' ' ~ crit.get('operator', '') ~ ' ' ~ crit.get('value', '')) }}</span>
+                                            </div>
+                                            {% endfor %}
+                                            {% endif %}
+                                        </div>
+                                    </details>
+                                    {% else %}
+                                    <span class="inline-flex items-center rounded bg-blue-50 px-1.5 py-0.5 text-xs font-medium text-blue-700">T{{ fee.tier.tier_number }}</span>
+                                    {% endif %}
                                 {% elif fee.volume_tier %}
                                 {{ fee.volume_tier }}
                                 {% else %}
@@ -492,6 +539,12 @@
         </div>
     </div>
 </div>
+
+<!-- Tier details styling -->
+<style>
+    .tier-details summary::-webkit-details-marker { display: none; }
+    .tier-details[open] .tier-chevron { transform: rotate(180deg); }
+</style>
 
 <!-- Client-side table sort (desktop only) -->
 <script>

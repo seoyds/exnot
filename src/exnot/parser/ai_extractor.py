@@ -157,8 +157,8 @@ class AIExtractor:
 
     def _build_document_context(self, document: ExtractedDocument) -> str:
         """Build a compact document context string for AI calls."""
-        # Truncate full text
-        full_text = document.full_text[:10000]
+        # Truncate full text (large PDFs like BOX can be 50K+ chars)
+        full_text = document.full_text[:60000]
 
         # Build table text with row limits
         tables_text = ""
@@ -192,7 +192,6 @@ class AIExtractor:
 
         text, stop_reason, in_tok, out_tok = self._call_api(
             [{"role": "user", "content": f"{prompt}\n\n{context}"}],
-            max_tokens=8192,
         )
         result.ai_calls_made += 1
         result.total_tokens_used += in_tok + out_tok
@@ -225,7 +224,6 @@ class AIExtractor:
 
             corrections_text, _, in_tok, out_tok = self._call_api(
                 [{"role": "user", "content": self._build_self_question_prompt(document, result, issues)}],
-                max_tokens=8192,
             )
             result.ai_calls_made += 1
             result.total_tokens_used += in_tok + out_tok
@@ -337,7 +335,13 @@ class AIExtractor:
     def _parse_json_response(self, text: str) -> dict:
         """Parse JSON from Claude's response, handling markdown code blocks and truncation."""
         text = text.strip()
-        if text.startswith("```"):
+
+        # Extract content from markdown code fences (handles preamble text before ```)
+        import re
+        fence_match = re.search(r"```(?:json)?\s*\n(.*?)(?:```|$)", text, re.DOTALL)
+        if fence_match:
+            text = fence_match.group(1).strip()
+        elif text.startswith("```"):
             lines = text.split("\n")
             lines = [line for line in lines if not line.strip().startswith("```")]
             text = "\n".join(lines)
