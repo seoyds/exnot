@@ -79,28 +79,42 @@
                     </div>
                     <div class="flex items-center space-x-4">
                         {% if user %}
-                        <span class="text-sm text-slate-400">{{ user.username }}</span>
+                        <span class="text-sm text-slate-400 hidden sm:inline">{{ user.username }}</span>
                         <a href="/dashboard/logout"
-                           class="rounded-md bg-slate-800 px-3 py-2 text-sm font-medium text-slate-300 hover:bg-slate-700 hover:text-white transition-colors">
+                           class="rounded-md bg-slate-800 px-3 py-2 text-sm font-medium text-slate-300 hover:bg-slate-700 hover:text-white transition-colors hidden sm:block">
                             Logout
                         </a>
                         {% else %}
                         <a href="/dashboard/login"
-                           class="rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-500 transition-colors">
+                           class="rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-500 transition-colors hidden sm:block">
                             Login
                         </a>
                         {% endif %}
+                        <!-- Mobile hamburger -->
+                        <button type="button" class="md:hidden inline-flex items-center justify-center rounded-md p-2 text-slate-400 hover:bg-slate-700 hover:text-white"
+                                onclick="document.getElementById('mobile-menu').classList.toggle('hidden')">
+                            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+                            </svg>
+                        </button>
                     </div>
                 </div>
             </div>
-            <!-- Mobile menu -->
-            <div class="md:hidden border-t border-slate-700">
+            <!-- Mobile menu (hidden by default) -->
+            <div class="md:hidden border-t border-slate-700 hidden" id="mobile-menu">
                 <div class="space-y-1 px-2 pb-3 pt-2">
                     <a href="/dashboard" class="block rounded-md px-3 py-2 text-base font-medium text-slate-300 hover:bg-slate-700 hover:text-white">Dashboard</a>
                     <a href="/dashboard/compare" class="block rounded-md px-3 py-2 text-base font-medium text-slate-300 hover:bg-slate-700 hover:text-white">Compare</a>
                     <a href="/dashboard/changes" class="block rounded-md px-3 py-2 text-base font-medium text-slate-300 hover:bg-slate-700 hover:text-white">Changes</a>
                     <a href="/dashboard/subscribe" class="block rounded-md px-3 py-2 text-base font-medium text-slate-300 hover:bg-slate-700 hover:text-white">Subscribe</a>
+                    {% if user %}
+                    <div class="border-t border-slate-700 mt-2 pt-2">
+                        <span class="block px-3 py-1 text-sm text-slate-400">{{ user.username }}</span>
+                        <a href="/dashboard/logout" class="block rounded-md px-3 py-2 text-base font-medium text-slate-300 hover:bg-slate-700 hover:text-white">Logout</a>
+                    </div>
+                    {% else %}
                     <a href="/dashboard/login" class="block rounded-md px-3 py-2 text-base font-medium text-slate-300 hover:bg-slate-700 hover:text-white">Login</a>
+                    {% endif %}
                 </div>
             </div>
         </nav>
