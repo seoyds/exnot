@@ -47,19 +47,26 @@ src/exnot/
 │   ├── engine.py          # SQLAlchemy async engine + session factory
 │   ├── models.py          # ORM models (Exchange, FeeScheduleSnapshot, NormalizedFee, FeeChange, Subscriber, etc.)
 │   └── repositories.py   # Data access layer (repository pattern)
+├── discovery/
+│   ├── search.py          # SerpAPI-based URL search
+│   ├── discoverer.py      # Fee schedule URL discovery logic
+│   └── pipeline.py        # Discovery pipeline orchestration
 ├── exchanges/
 │   ├── registry.py        # Exchange registry loader
 │   └── definitions/       # 19 YAML files (one per exchange)
-├── scraper/
-│   ├── base.py            # Abstract scraper
-│   ├── http_scraper.py    # httpx-based
-│   ├── browser_scraper.py # Playwright-based
-│   └── document.py        # Downloaded document model
 ├── parser/
-│   ├── base.py            # Abstract parser
-│   ├── pdf_parser.py      # PDF text/table extraction
+│   ├── base.py            # Abstract parser + ExtractedDocument/ExtractedTable
+│   ├── pdf_parser.py      # PDF text/table extraction (PyMuPDF + pdfplumber)
 │   ├── html_parser.py     # HTML fee schedule parser
-│   └── ai_extractor.py    # Claude-powered extraction pipeline
+│   ├── csv_parser.py      # CSV fee schedule parser
+│   ├── ai_extractor.py    # Claude-powered extraction (single + sectioned modes)
+│   ├── section_splitter.py # Document section detection, context classification, grouping
+│   ├── extraction_hints.py # Extraction hint generation for AI prompts
+│   └── table_classifier.py # Table type classification
+├── profiles/
+│   ├── builder.py         # Profile builder (column→schema mappings from AI output)
+│   ├── extractor.py       # Rules-based extraction using saved profiles (zero AI cost)
+│   └── fingerprint.py     # Document fingerprinting for profile matching
 ├── normalizer/
 │   ├── schema.py          # Canonical fee schema (Pydantic enums + models)
 │   ├── engine.py          # Normalization pipeline
@@ -71,8 +78,15 @@ src/exnot/
 ├── notifications/
 │   ├── email_sender.py    # Async SMTP delivery
 │   └── templates/         # Email templates (fee_change.html, daily_digest.html)
+├── scraper/
+│   ├── base.py            # Abstract scraper
+│   ├── http_scraper.py    # httpx-based
+│   ├── browser_scraper.py # Playwright-based
+│   └── document.py        # Downloaded document model
+├── storage/
+│   └── minio_client.py    # MinIO object storage for scraped documents
 └── workers/
-    ├── celery_app.py      # Celery configuration
+    ├── celery_app.py      # Celery configuration (queues, routing, time limits)
     ├── tasks.py            # Task definitions
     ├── schedules.py        # Beat schedule (cron)
     └── pipelines.py        # Orchestration pipelines
@@ -126,6 +140,23 @@ Scrape → Parse (AI) → Normalize → Diff → Notify
 
 Each exchange's fee schedule goes through: document download, hash-based change detection, AI-powered extraction, normalization to canonical schema, diff against previous version, and email notification to subscribers.
 
+### AI Extraction Modes
+
+The AI extractor (`parser/ai_extractor.py`) has two extraction paths:
+
+- **Single extraction** (default for small documents): Sends the entire document to Claude in one API call. Used when document text < 20K chars and < 8 tables.
+- **Sectioned extraction** (for large documents): Splits the document into logical sections via `section_splitter.py`, classifies context sections (definitions, footnotes, appendix), groups fee-bearing sections by character budget, and makes separate AI calls per group. Context sections are always included with every call for reference. Results are merged and deduplicated.
+
+The sectioned path activates automatically based on document size — no configuration needed. The character budget per section group is configurable via `AI_SECTION_CHAR_BUDGET` (default 15000).
+
+### Extraction Profiles
+
+The profiles system (`profiles/`) enables zero-cost re-extraction of unchanged document formats:
+
+1. **First run**: AI extracts fees and a profile is built mapping document columns to schema fields
+2. **Subsequent runs**: If the document structure fingerprint matches, the profile applies rules-based extraction with zero AI API calls
+3. Profiles are stored per-exchange and include column mappings, table structure fingerprints, and match confidence scores
+
 ### Database Models
 
 Core models in `db/models.py`:
@@ -161,6 +192,9 @@ Settings are in `config.py` via pydantic-settings, loaded from environment or `.
 - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD` - Email config
 - `ADMIN_EMAIL`, `ADMIN_PASSWORD` - Default admin credentials
 - `APP_URL` - Base URL for links in emails
+- `AI_SECTION_CHAR_BUDGET` - Character budget per section group for sectioned AI extraction (default 15000)
+- `SERPAPI_API_KEY` - SerpAPI key for fee schedule URL discovery
+- `CLOUDFLARE_TUNNEL_TOKEN` - Cloudflare tunnel token for production deployment
 
 ## Conventions
 
