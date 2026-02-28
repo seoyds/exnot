@@ -52,20 +52,20 @@ class Settings(BaseSettings):
     pdf_parser_backend: str = "pymupdf"  # "pymupdf" or "docling"
 
     # AI — default model (fallback for all tasks)
-    ai_model: str = "anthropic/claude-sonnet-4-20250514"
+    ai_model: str = "deepseek/deepseek-v3.2-20251201"
     ai_max_tokens: int = 32768
     ai_confidence_threshold: float = 0.8
     ai_max_retries: int = 3
     ai_section_char_budget: int = 15000
 
-    # Per-task model routing (all OpenRouter model IDs)
-    ai_model_table_classification: str = "google/gemini-2.5-flash"
-    ai_model_orchestrator: str = "google/gemini-2.5-flash"
-    ai_model_fee_extraction: str = "anthropic/claude-sonnet-4-20250514"
-    ai_model_fee_validation: str = "openai/gpt-4o-mini"
-    ai_model_correction: str = "anthropic/claude-sonnet-4-20250514"
-    ai_model_url_discovery: str = "google/gemini-2.5-flash"
-    ai_model_change_summary: str = "google/gemini-2.5-flash"
+    # Per-task model routing (all OpenRouter model IDs, all < $0.40/M tokens)
+    ai_model_table_classification: str = "qwen/qwen3.5-flash-02-23"
+    ai_model_orchestrator: str = "qwen/qwen3.5-flash-02-23"
+    ai_model_fee_extraction: str = "deepseek/deepseek-v3.2-20251201"
+    ai_model_fee_validation: str = "mistralai/mistral-small-3.1-24b-instruct"
+    ai_model_correction: str = "deepseek/deepseek-v3.2-20251201"
+    ai_model_url_discovery: str = "qwen/qwen3.5-flash-02-23"
+    ai_model_change_summary: str = "qwen/qwen3.5-flash-02-23"
 
     # Budget guardrails
     ai_budget_per_exchange_usd: float = 2.00

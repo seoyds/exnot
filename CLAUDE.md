@@ -222,14 +222,14 @@ Settings are in `config.py` via pydantic-settings, loaded from environment or `.
 - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD` - Email config
 - `ADMIN_EMAIL`, `ADMIN_PASSWORD` - Default admin credentials
 - `APP_URL` - Base URL for links in emails
-- `AI_MODEL` - Default/fallback model (default: anthropic/claude-sonnet-4-20250514)
-- `AI_MODEL_TABLE_CLASSIFICATION` - Table classifier model (default: google/gemini-2.5-flash)
-- `AI_MODEL_ORCHESTRATOR` - Orchestrator model (default: google/gemini-2.5-flash)
-- `AI_MODEL_FEE_EXTRACTION` - Fee extraction model (default: anthropic/claude-sonnet-4-20250514)
-- `AI_MODEL_FEE_VALIDATION` - Validation model (default: openai/gpt-4o-mini)
-- `AI_MODEL_CORRECTION` - Correction model (default: anthropic/claude-sonnet-4-20250514)
-- `AI_MODEL_URL_DISCOVERY` - URL discovery model (default: google/gemini-2.5-flash)
-- `AI_MODEL_CHANGE_SUMMARY` - Change summary model (default: google/gemini-2.5-flash)
+- `AI_MODEL` - Default/fallback model (default: deepseek/deepseek-v3.2-20251201)
+- `AI_MODEL_TABLE_CLASSIFICATION` - Table classifier model (default: qwen/qwen3.5-flash-02-23)
+- `AI_MODEL_ORCHESTRATOR` - Orchestrator model (default: qwen/qwen3.5-flash-02-23)
+- `AI_MODEL_FEE_EXTRACTION` - Fee extraction model (default: deepseek/deepseek-v3.2-20251201)
+- `AI_MODEL_FEE_VALIDATION` - Validation model (default: mistralai/mistral-small-3.1-24b-instruct)
+- `AI_MODEL_CORRECTION` - Correction model (default: deepseek/deepseek-v3.2-20251201)
+- `AI_MODEL_URL_DISCOVERY` - URL discovery model (default: qwen/qwen3.5-flash-02-23)
+- `AI_MODEL_CHANGE_SUMMARY` - Change summary model (default: qwen/qwen3.5-flash-02-23)
 - `AI_BUDGET_PER_EXCHANGE_USD` - Max cost per exchange per pipeline run (default: 2.00)
 - `AI_BUDGET_DAILY_USD` - Daily total cap (default: 15.00)
 - `AI_SECTION_CHAR_BUDGET` - Character budget per section group for sectioned AI extraction (default 15000)

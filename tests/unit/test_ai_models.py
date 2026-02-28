@@ -10,14 +10,14 @@ def _make_settings(**overrides):
     settings = MagicMock()
     settings.openrouter_api_key = "test-key"
     settings.openrouter_base_url = "https://openrouter.ai/api/v1"
-    settings.ai_model = "anthropic/claude-sonnet-4-20250514"
-    settings.ai_model_table_classification = "google/gemini-2.5-flash"
-    settings.ai_model_orchestrator = "google/gemini-2.5-flash"
-    settings.ai_model_fee_extraction = "anthropic/claude-sonnet-4-20250514"
-    settings.ai_model_fee_validation = "openai/gpt-4o-mini"
-    settings.ai_model_correction = "anthropic/claude-sonnet-4-20250514"
-    settings.ai_model_url_discovery = "google/gemini-2.5-flash"
-    settings.ai_model_change_summary = "google/gemini-2.5-flash"
+    settings.ai_model = "deepseek/deepseek-v3.2-20251201"
+    settings.ai_model_table_classification = "qwen/qwen3.5-flash-02-23"
+    settings.ai_model_orchestrator = "qwen/qwen3.5-flash-02-23"
+    settings.ai_model_fee_extraction = "deepseek/deepseek-v3.2-20251201"
+    settings.ai_model_fee_validation = "mistralai/mistral-small-3.1-24b-instruct"
+    settings.ai_model_correction = "deepseek/deepseek-v3.2-20251201"
+    settings.ai_model_url_discovery = "qwen/qwen3.5-flash-02-23"
+    settings.ai_model_change_summary = "qwen/qwen3.5-flash-02-23"
     for k, v in overrides.items():
         setattr(settings, k, v)
     return settings
@@ -28,9 +28,9 @@ class TestModelRegistry:
         settings = _make_settings()
         registry = ModelRegistry(settings)
 
-        assert registry.get_model_name(TaskType.TABLE_CLASSIFICATION) == "google/gemini-2.5-flash"
-        assert registry.get_model_name(TaskType.FEE_EXTRACTION) == "anthropic/claude-sonnet-4-20250514"
-        assert registry.get_model_name(TaskType.FEE_VALIDATION) == "openai/gpt-4o-mini"
+        assert registry.get_model_name(TaskType.TABLE_CLASSIFICATION) == "qwen/qwen3.5-flash-02-23"
+        assert registry.get_model_name(TaskType.FEE_EXTRACTION) == "deepseek/deepseek-v3.2-20251201"
+        assert registry.get_model_name(TaskType.FEE_VALIDATION) == "mistralai/mistral-small-3.1-24b-instruct"
 
     def test_get_model_returns_instance(self):
         settings = _make_settings()
@@ -46,15 +46,15 @@ class TestModelRegistry:
         model1 = registry.get_model(TaskType.ORCHESTRATOR)
         model2 = registry.get_model(TaskType.TABLE_CLASSIFICATION)
 
-        # Same model name (both gemini-2.5-flash) -> same cached instance
+        # Same model name (both qwen3.5-flash) -> same cached instance
         assert model1 is model2
 
     def test_different_models_not_shared(self):
         settings = _make_settings()
         registry = ModelRegistry(settings)
 
-        cheap = registry.get_model(TaskType.ORCHESTRATOR)  # gemini-2.5-flash
-        expensive = registry.get_model(TaskType.FEE_EXTRACTION)  # claude-sonnet
+        cheap = registry.get_model(TaskType.ORCHESTRATOR)  # qwen3.5-flash
+        expensive = registry.get_model(TaskType.FEE_EXTRACTION)  # deepseek-v3.2
 
         assert cheap is not expensive
 
