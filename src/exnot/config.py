@@ -52,6 +52,7 @@ class Settings(BaseSettings):
     ai_max_tokens: int = 32768
     ai_confidence_threshold: float = 0.8
     ai_max_retries: int = 3
+    ai_section_char_budget: int = 15000
 
     # URL Discovery
     serpapi_api_key: str = ""

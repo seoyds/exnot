@@ -48,8 +48,8 @@ celery_app.conf.task_routes = {
 celery_app.conf.task_acks_late = True
 celery_app.conf.worker_prefetch_multiplier = 1
 celery_app.conf.task_track_started = True
-celery_app.conf.task_time_limit = 600  # 10 minutes hard limit
-celery_app.conf.task_soft_time_limit = 540  # 9 minutes soft limit
+celery_app.conf.task_time_limit = 1800  # 30 minutes hard limit (sectioned extraction may need 4+ AI calls)
+celery_app.conf.task_soft_time_limit = 1500  # 25 minutes soft limit
 
 # Result settings
 celery_app.conf.result_expires = 86400  # 24 hours
