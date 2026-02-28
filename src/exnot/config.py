@@ -14,8 +14,9 @@ class Settings(BaseSettings):
     # Redis
     redis_url: str = "redis://localhost:6379/0"
 
-    # Anthropic
-    anthropic_api_key: str = ""
+    # LLM (OpenRouter - OpenAI-compatible)
+    openrouter_api_key: str = ""
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
 
     # Email (Gmail SMTP)
     smtp_host: str = "smtp.gmail.com"
@@ -47,12 +48,28 @@ class Settings(BaseSettings):
     scrape_timeout_seconds: int = 30
     user_agent: str = "ExNot/0.1.0 (US Options Fee Schedule Monitor; +https://github.com/exnot)"
 
-    # AI
-    ai_model: str = "claude-sonnet-4-6"
+    # PDF Parser
+    pdf_parser_backend: str = "pymupdf"  # "pymupdf" or "docling"
+
+    # AI — default model (fallback for all tasks)
+    ai_model: str = "anthropic/claude-sonnet-4-20250514"
     ai_max_tokens: int = 32768
     ai_confidence_threshold: float = 0.8
     ai_max_retries: int = 3
     ai_section_char_budget: int = 15000
+
+    # Per-task model routing (all OpenRouter model IDs)
+    ai_model_table_classification: str = "google/gemini-2.5-flash"
+    ai_model_orchestrator: str = "google/gemini-2.5-flash"
+    ai_model_fee_extraction: str = "anthropic/claude-sonnet-4-20250514"
+    ai_model_fee_validation: str = "openai/gpt-4o-mini"
+    ai_model_correction: str = "anthropic/claude-sonnet-4-20250514"
+    ai_model_url_discovery: str = "google/gemini-2.5-flash"
+    ai_model_change_summary: str = "google/gemini-2.5-flash"
+
+    # Budget guardrails
+    ai_budget_per_exchange_usd: float = 2.00
+    ai_budget_daily_usd: float = 15.00
 
     # URL Discovery
     serpapi_api_key: str = ""

@@ -1,19 +1,16 @@
-"""Tests for AI extractor pre-filtering."""
-from exnot.parser.base import ExtractedDocument, ExtractedTable
-from exnot.parser.ai_extractor import AIExtractor
+"""Tests for table pre-filtering in the extraction pipeline.
+
+The table filtering behavior (excluding non-fee tables like connectivity/ports)
+is now handled by the table classifier (rule-based), which is called from the
+orchestrator's extract_section tool.
+"""
+
+from exnot.parser.base import ExtractedTable
+from exnot.parser.table_classifier import classify_tables
 
 
-def _make_doc(tables):
-    return ExtractedDocument(
-        full_text="Sample fee schedule text",
-        tables=tables,
-        page_count=1,
-        metadata={},
-    )
-
-
-def test_build_document_context_filters_non_fee_tables():
-    """Non-fee tables (ports, connectivity) should be excluded from AI context."""
+def test_classify_tables_filters_non_fee_tables():
+    """Non-fee tables (ports, connectivity) should be classified as non-fee."""
     fee_table = ExtractedTable(
         headers=["Account Type", "Maker", "Taker"],
         rows=[["Customer", "$0.50", "$0.45"]],
@@ -28,11 +25,8 @@ def test_build_document_context_filters_non_fee_tables():
         page_number=2,
         footnotes=[],
     )
-    doc = _make_doc([fee_table, port_table])
 
-    extractor = AIExtractor.__new__(AIExtractor)  # Skip __init__ (no API key needed)
-    context = extractor._build_document_context(doc)
+    results = classify_tables([fee_table, port_table])
 
-    assert "Transaction Fees" in context or "Maker" in context
-    assert "FIX Ports" not in context
-    assert "$540 per port" not in context
+    assert results[0].is_fee_table is True, f"Fee table should be classified as fee: {results[0].reason}"
+    assert results[1].is_fee_table is False, f"Port table should be classified as non-fee: {results[1].reason}"

@@ -30,8 +30,9 @@ dependencies = [
     "pdfplumber>=0.11.0",
     # Browser automation
     "playwright>=1.49.0",
-    # AI/LLM
-    "anthropic>=0.40.0",
+    # AI/LLM (PydanticAI agents + LiteLLM cost tracking via OpenRouter)
+    "pydantic-ai>=1.0.0",
+    "litellm>=1.80.0",
     # Configuration
     "pydantic[email]>=2.10.0",
     "pydantic-settings>=2.7.0",
@@ -52,6 +53,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+docling = [
+    "docling>=2.31.0",
+    "docling-core>=2.0.0",
+]
 dev = [
     "pytest>=8.3.0",
     "pytest-asyncio>=0.24.0",

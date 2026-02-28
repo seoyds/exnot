@@ -1,11 +1,9 @@
 """Fee schedule URL discovery using web search + AI validation."""
 
 import asyncio
-import json
 import logging
 from dataclasses import dataclass, field
 
-import anthropic
 import httpx
 
 from exnot.config import get_settings
@@ -44,43 +42,11 @@ class DiscoveryResult:
     error: str | None = None
 
 
-URL_EVALUATION_PROMPT = """You are evaluating search results to find the official fee schedule for a US options exchange.
-
-Exchange: {exchange_name} ({exchange_code})
-Operator: {operator}
-
-Below are candidate URLs found via web search. For each, I provide the URL, page title, search snippet, detected content type, and a preview of the content (if available).
-
-CANDIDATES:
-{candidates_text}
-
-TASK: Identify which URL(s) contain the actual, current fee schedule for this OPTIONS exchange.
-
-RULES:
-- The fee schedule must be specifically for OPTIONS (not equities, listings, or market data).
-- Prefer official exchange/operator websites (e.g., cboe.com, nasdaq.com, nyse.com, miaxglobal.com).
-- Prefer direct links to the fee schedule document (PDF or CSV) over landing pages.
-- If a landing page links to a downloadable fee schedule, select the landing page as primary.
-- REJECT: regulatory filings (SEC), news articles, third-party sites, listing guides, market data fees.
-- If multiple valid URLs exist, pick the best as primary and list others as alternates.
-
-Return JSON:
-{{
-  "primary_url": "<best URL or null if none found>",
-  "alternate_urls": ["<other valid fee schedule URLs>"],
-  "recommended_format": "PDF" | "CSV" | "HTML",
-  "confidence": <0.0 to 1.0>,
-  "reasoning": "<explain your selection>"
-}}"""
-
-
 class UrlDiscoverer:
     """Discovers fee schedule URLs for US options exchanges."""
 
     def __init__(self):
         settings = get_settings()
-        self.client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-        self.model = settings.ai_model
         self.max_candidates = settings.discovery_max_candidates
         self.fetch_timeout = settings.discovery_fetch_timeout
 
@@ -128,8 +94,8 @@ class UrlDiscoverer:
             {"url": c.url, "title": c.title, "content_type": c.content_type} for c in candidates
         ]
 
-        # Step 3: Use Claude to evaluate candidates
-        evaluation = self._evaluate_with_ai(candidates, exchange_code, exchange_name, operator)
+        # Step 3: Use AI agent to evaluate candidates
+        evaluation = await self._evaluate_with_ai(candidates, exchange_code, exchange_name, operator)
 
         result.primary_url = evaluation.get("primary_url")
         result.alternate_urls = evaluation.get("alternate_urls", [])
@@ -199,14 +165,19 @@ class UrlDiscoverer:
 
         return candidate
 
-    def _evaluate_with_ai(
+    async def _evaluate_with_ai(
         self,
         candidates: list[CandidateUrl],
         exchange_code: str,
         exchange_name: str,
         operator: str,
     ) -> dict:
-        """Use Claude to pick the best fee schedule URL from candidates."""
+        """Use the discovery agent to pick the best fee schedule URL from candidates."""
+        from exnot.ai.agents.discovery import discovery_agent
+        from exnot.ai.cost import CostTracker
+        from exnot.ai.deps import DiscoveryDeps
+        from exnot.ai.models import ModelRegistry, TaskType
+
         candidates_text = ""
         for i, c in enumerate(candidates, 1):
             candidates_text += f"\n--- Candidate {i} ---\n"
@@ -217,48 +188,44 @@ class UrlDiscoverer:
             if c.fetch_error:
                 candidates_text += f"Fetch Error: {c.fetch_error}\n"
             elif c.content_preview:
-                preview = c.content_preview[:500]
+                preview = c.content_preview[:200]
                 candidates_text += f"Content Preview: {preview}\n"
 
-        prompt = URL_EVALUATION_PROMPT.format(
-            exchange_name=exchange_name,
-            exchange_code=exchange_code,
-            operator=operator,
-            candidates_text=candidates_text,
+        prompt = (
+            f"Exchange: {exchange_name} ({exchange_code})\n"
+            f"Operator: {operator}\n\n"
+            f"CANDIDATES:\n{candidates_text}\n\n"
+            f"Identify which URL(s) contain the actual, current fee schedule for this OPTIONS exchange."
         )
 
         try:
-            response = self.client.messages.create(
-                model=self.model,
-                max_tokens=2048,
-                messages=[{"role": "user", "content": prompt}],
+            settings = get_settings()
+            registry = ModelRegistry(settings)
+            cost_tracker = CostTracker(exchange_code=exchange_code, budget_usd=0.50)
+            deps = DiscoveryDeps(
+                model_registry=registry,
+                cost_tracker=cost_tracker,
+                exchange_code=exchange_code,
+                exchange_name=exchange_name,
+                operator=operator,
             )
 
-            text = response.content[0].text.strip()
-            logger.info(
-                f"[{exchange_code}] AI evaluation: {response.usage.input_tokens} in, "
-                f"{response.usage.output_tokens} out tokens"
+            model = registry.get_model(TaskType.URL_DISCOVERY)
+            result = await discovery_agent.run(prompt, deps=deps, model=model)
+
+            model_name = registry.get_model_name(TaskType.URL_DISCOVERY)
+            cost_tracker.record(
+                task="url_discovery",
+                model=model_name,
+                usage=result.usage(),
             )
-            return self._parse_json(text)
+
+            logger.info(
+                f"[{exchange_code}] AI discovery: cost=${cost_tracker.total_cost_usd:.4f}, "
+                f"tokens={cost_tracker.total_tokens}"
+            )
+
+            return result.output.model_dump()
         except Exception as e:
             logger.error(f"[{exchange_code}] AI evaluation failed: {e}")
-            return {}
-
-    def _parse_json(self, text: str) -> dict:
-        """Parse JSON from Claude's response."""
-        text = text.strip()
-        if text.startswith("```"):
-            lines = text.split("\n")
-            lines = [line for line in lines if not line.strip().startswith("```")]
-            text = "\n".join(lines)
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            start = text.find("{")
-            end = text.rfind("}") + 1
-            if start >= 0 and end > start:
-                try:
-                    return json.loads(text[start:end])
-                except json.JSONDecodeError:
-                    pass
             return {}
