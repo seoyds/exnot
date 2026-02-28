@@ -11,7 +11,7 @@ ExNot (Exchange Notifications) is an AI-agentic system that automatically collec
 - **Database**: PostgreSQL 16 via SQLAlchemy 2.x (async with asyncpg)
 - **Migrations**: Alembic
 - **Task Queue**: Celery 5.x with Redis broker
-- **AI/LLM**: Anthropic Claude API
+- **AI/LLM**: OpenRouter (OpenAI-compatible API)
 - **PDF Processing**: PyMuPDF (fitz) + pdfplumber
 - **Web Scraping**: httpx + BeautifulSoup4 + Playwright
 - **Dashboard**: Jinja2 + HTMX + Tailwind CSS (CDN)
@@ -187,7 +187,8 @@ Settings are in `config.py` via pydantic-settings, loaded from environment or `.
 
 - `DATABASE_URL` - PostgreSQL async connection string
 - `REDIS_URL` - Redis connection string
-- `ANTHROPIC_API_KEY` - Claude API key
+- `OPENROUTER_API_KEY` - OpenRouter API key
+- `OPENROUTER_BASE_URL` - OpenRouter base URL (default: https://openrouter.ai/api/v1)
 - `SECRET_KEY` - JWT signing key
 - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD` - Email config
 - `ADMIN_EMAIL`, `ADMIN_PASSWORD` - Default admin credentials

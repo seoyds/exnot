@@ -1,6 +1,8 @@
 services:
   web:
-    build: .
+    build:
+      context: .
+      target: ${DOCKER_BUILD_TARGET:-base}
     command: uvicorn exnot.api.app:app --host 0.0.0.0 --port 8000 --reload
     env_file: .env
     volumes:
@@ -14,7 +16,9 @@ services:
         condition: service_healthy
 
   worker:
-    build: .
+    build:
+      context: .
+      target: ${DOCKER_BUILD_TARGET:-base}
     command: celery -A exnot.workers.celery_app worker -l info -c 4 -Q default,scraping,parsing,notifications
     env_file: .env
     volumes:
@@ -28,7 +32,9 @@ services:
         condition: service_healthy
 
   beat:
-    build: .
+    build:
+      context: .
+      target: ${DOCKER_BUILD_TARGET:-base}
     command: celery -A exnot.workers.celery_app beat -l info
     env_file: .env
     volumes:
@@ -40,7 +46,9 @@ services:
         condition: service_healthy
 
   flower:
-    build: .
+    build:
+      context: .
+      target: ${DOCKER_BUILD_TARGET:-base}
     command: celery -A exnot.workers.celery_app flower --port=5555
     env_file: .env
     depends_on:

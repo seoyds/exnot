@@ -35,7 +35,7 @@ from exnot.parser.ai_extractor import AIExtractor
 from exnot.parser.base import ExtractedDocument
 from exnot.parser.csv_parser import CsvParser
 from exnot.parser.html_parser import HtmlParser
-from exnot.parser.pdf_parser import PdfParser
+from exnot.parser.factory import get_pdf_parser
 from exnot.scraper.base import CollectionResult, DocumentResult
 from exnot.scraper.document import DocumentCollector
 from exnot.storage.minio_client import DocumentStorage
@@ -396,7 +396,7 @@ def _parse_document(exchange: Exchange, doc_result: DocumentResult) -> Extracted
         parser = CsvParser()
     elif doc_result.is_pdf or exchange.fee_schedule_format == FeeScheduleFormat.PDF:
         logger.info(f"[{exchange.code}] Parsing as PDF")
-        parser = PdfParser()
+        parser = get_pdf_parser()
     else:
         logger.info(f"[{exchange.code}] Parsing as HTML")
         parser = HtmlParser()

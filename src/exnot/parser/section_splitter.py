@@ -79,7 +79,7 @@ def split_document(
 
     Args:
         document: The parsed document.
-        format_hint: One of "pdf", "html", "csv".
+        format_hint: One of "pdf", "html", "csv", "docling".
 
     Returns:
         List of DocumentSection objects.
@@ -89,6 +89,8 @@ def split_document(
         sections = _split_csv_text(document)
     elif fmt == "html":
         sections = _split_html_text(document)
+    elif fmt == "docling" and document.metadata.get("markdown"):
+        sections = _split_docling_markdown(document)
     else:
         sections = _split_pdf_text(document)
 
@@ -220,6 +222,44 @@ def _split_csv_text(document: ExtractedDocument) -> list[DocumentSection]:
             sections[i].tables.append(table)
         elif sections:
             sections[-1].tables.append(table)
+
+    return sections
+
+
+# Markdown heading pattern for Docling output (## Section Title)
+MARKDOWN_HEADING = re.compile(r"^(#{1,2})\s+(.+)$")
+
+
+def _split_docling_markdown(document: ExtractedDocument) -> list[DocumentSection]:
+    """Split Docling markdown on markdown headings.
+
+    Falls back to the standard PDF page-marker splitting if no markdown
+    headings are found.
+    """
+    markdown = document.metadata.get("markdown", "")
+    if not markdown:
+        return _split_pdf_text(document)
+
+    # Split on ## headings (Docling uses ## for section-level headings)
+    parts = re.split(r"(?=^#{1,2}\s+)", markdown, flags=re.MULTILINE)
+
+    sections: list[DocumentSection] = []
+    for part in parts:
+        part = part.strip()
+        if not part:
+            continue
+
+        first_line = part.split("\n", 1)[0]
+        heading_match = MARKDOWN_HEADING.match(first_line)
+        heading = heading_match.group(2) if heading_match else "Section"
+
+        sections.append(DocumentSection(heading=heading, text=part))
+
+    if not sections:
+        return _split_pdf_text(document)
+
+    # Assign tables to sections by title proximity
+    _assign_tables_to_sections(sections, document.tables)
 
     return sections
 
