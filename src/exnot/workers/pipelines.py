@@ -17,11 +17,13 @@ from exnot.db.models import (
     ChangeType,
     DiscoveryStatus,
     Exchange,
+    ExchangeProfile,
     FeeChange,
     FeeScheduleFormat,
     FeeScheduleSnapshot,
     FeeTier,
     NormalizedFee,
+    ProfileStatus,
     ScrapedDocument,
     ScrapeLog,
     ScrapeStatus,
@@ -129,26 +131,55 @@ def run_scrape_pipeline(exchange_code: str, session: Session) -> ChangeReport | 
     snapshot.status = SnapshotStatus.PARSED
     session.flush()
 
-    # --- Step (f): Run AI extraction ---
-    ai_extractor = AIExtractor()
-    extraction_result = ai_extractor.extract(extracted, exchange_code)
-    snapshot.ai_extraction = {
-        "structural_analysis": extraction_result.structural_analysis,
-        "raw_fees_count": len(extraction_result.raw_fees),
-        "confidence": extraction_result.confidence,
-        "exchange_name": extraction_result.exchange_name,
-        "effective_date": extraction_result.effective_date,
-        "extraction_notes": extraction_result.extraction_notes,
-        "ai_calls_made": extraction_result.ai_calls_made,
-    }
-    snapshot.parsing_confidence = extraction_result.confidence
-    session.flush()
+    # --- Step (f): Try profile-based extraction, fall back to AI ---
+    profile_fees = _try_profile_extraction(exchange, extracted, session)
 
-    # --- Step (g): Normalize fees ---
-    from exnot.normalizer.engine import NormalizationEngine
+    if profile_fees is not None:
+        # Rules-based extraction succeeded — skip AI
+        logger.info(f"[{exchange_code}] Using profile-based extraction ({len(profile_fees)} fees)")
+        snapshot.ai_extraction = {
+            "extraction_mode": "PROFILE",
+            "raw_fees_count": len(profile_fees),
+            "ai_calls_made": 0,
+        }
+        snapshot.parsing_confidence = 1.0
+        session.flush()
 
-    normalizer = NormalizationEngine()
-    normalized_schedule = normalizer.normalize(extraction_result, exchange_code)
+        from exnot.normalizer.engine import NormalizationEngine
+        from exnot.parser.ai_extractor import ExtractionResult
+
+        # Wrap profile fees in ExtractionResult for normalizer compatibility
+        extraction_result = ExtractionResult(
+            raw_fees=profile_fees,
+            confidence=1.0,
+            exchange_name=exchange.name,
+            extraction_notes="Profile-based extraction (zero AI)",
+        )
+        normalizer = NormalizationEngine()
+        normalized_schedule = normalizer.normalize(extraction_result, exchange_code)
+    else:
+        # AI extraction (existing path)
+        ai_extractor = AIExtractor()
+        extraction_result = ai_extractor.extract(extracted, exchange_code)
+        snapshot.ai_extraction = {
+            "structural_analysis": extraction_result.structural_analysis,
+            "raw_fees_count": len(extraction_result.raw_fees),
+            "confidence": extraction_result.confidence,
+            "exchange_name": extraction_result.exchange_name,
+            "effective_date": extraction_result.effective_date,
+            "extraction_notes": extraction_result.extraction_notes,
+            "ai_calls_made": extraction_result.ai_calls_made,
+        }
+        snapshot.parsing_confidence = extraction_result.confidence
+        session.flush()
+
+        from exnot.normalizer.engine import NormalizationEngine
+
+        normalizer = NormalizationEngine()
+        normalized_schedule = normalizer.normalize(extraction_result, exchange_code)
+
+        # Build/update profile from AI results
+        _build_and_save_profile(exchange, extracted, extraction_result.raw_fees, session)
 
     # Set effective date on snapshot if found
     if normalized_schedule.effective_date:
@@ -196,6 +227,102 @@ def run_scrape_pipeline(exchange_code: str, session: Session) -> ChangeReport | 
 
     # --- Step (k): Return the change report ---
     return change_report
+
+
+def _try_profile_extraction(
+    exchange: Exchange,
+    document: ExtractedDocument,
+    session: Session,
+) -> list[dict] | None:
+    """Attempt rules-based extraction using stored profile.
+
+    Returns list of fee dicts if profile extraction succeeds, None if AI needed.
+    """
+    from exnot.profiles.extractor import extract_all_from_profile
+    from exnot.profiles.fingerprint import compare_fingerprints, fingerprint_all_tables
+
+    profile = session.execute(
+        select(ExchangeProfile).where(ExchangeProfile.exchange_id == exchange.id)
+    ).scalar_one_or_none()
+
+    if not profile or profile.status != ProfileStatus.ACTIVE:
+        logger.info(f"[{exchange.code}] No active profile, will use AI extraction")
+        return None
+
+    # Compare fingerprints
+    current_fps = fingerprint_all_tables(document.tables)
+    comparison = compare_fingerprints(profile.table_fingerprints, current_fps)
+
+    if not comparison.all_match:
+        changed_pct = comparison.changed_ratio
+        if changed_pct > 0.5:
+            logger.info(
+                f"[{exchange.code}] Major table structure change ({changed_pct:.0%}), "
+                f"rebuilding profile with AI"
+            )
+        else:
+            logger.info(
+                f"[{exchange.code}] Minor table changes detected "
+                f"({len(comparison.changed_indices)} tables changed), "
+                f"falling back to AI for this run"
+            )
+        profile.status = ProfileStatus.NEEDS_UPDATE
+        session.flush()
+        return None
+
+    # All fingerprints match — rules-based extraction
+    logger.info(f"[{exchange.code}] All table fingerprints match profile, using rules-based extraction")
+    fees = extract_all_from_profile(document.tables, profile.table_mappings)
+    expected = profile.extraction_stats.get("expected_fee_count", "?")
+    logger.info(f"[{exchange.code}] Profile extraction: {len(fees)} fees (expected {expected})")
+
+    return fees
+
+
+def _build_and_save_profile(
+    exchange: Exchange,
+    document: ExtractedDocument,
+    ai_fees: list[dict],
+    session: Session,
+) -> None:
+    """Build a profile from AI extraction and save it."""
+    from exnot.profiles.builder import ProfileBuilder
+
+    builder = ProfileBuilder()
+    result = builder.build(document.tables, ai_fees)
+
+    # Only save as ACTIVE if match ratio is good
+    status = ProfileStatus.ACTIVE if result.match_ratio >= 0.7 else ProfileStatus.LEARNING
+
+    # Check if profile already exists
+    profile = session.execute(
+        select(ExchangeProfile).where(ExchangeProfile.exchange_id == exchange.id)
+    ).scalar_one_or_none()
+
+    if profile:
+        profile.table_mappings = result.table_mappings
+        profile.table_fingerprints = result.table_fingerprints
+        profile.extraction_stats = result.extraction_stats
+        profile.status = status
+        profile.profile_version += 1
+    else:
+        profile = ExchangeProfile(
+            exchange_id=exchange.id,
+            profile_version=1,
+            table_mappings=result.table_mappings,
+            table_fingerprints=result.table_fingerprints,
+            section_metadata={},
+            extraction_stats=result.extraction_stats,
+            status=status,
+        )
+        session.add(profile)
+
+    session.flush()
+    logger.info(
+        f"[{exchange.code}] Profile {'updated' if profile.profile_version > 1 else 'created'}: "
+        f"status={status.value}, match_ratio={result.match_ratio:.0%}, "
+        f"v{profile.profile_version}"
+    )
 
 
 def _collect_documents(exchange: Exchange) -> CollectionResult:

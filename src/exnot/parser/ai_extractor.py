@@ -157,12 +157,22 @@ class AIExtractor:
 
     def _build_document_context(self, document: ExtractedDocument) -> str:
         """Build a compact document context string for AI calls."""
+        from exnot.parser.table_classifier import classify_tables
+
         # Truncate full text (large PDFs like BOX can be 50K+ chars)
         full_text = document.full_text[:60000]
 
-        # Build table text with row limits
+        # Classify tables and only include fee-relevant ones
+        classifications = classify_tables(document.tables) if document.tables else []
+
+        # Build table text with row limits, skipping non-fee tables
         tables_text = ""
+        fee_table_count = 0
         for i, table in enumerate(document.tables):
+            is_fee = classifications[i].is_fee_table if i < len(classifications) else True
+            if not is_fee:
+                continue
+            fee_table_count += 1
             tables_text += f"\n--- Table {i + 1}: {table.title} ---\n"
             tables_text += f"Headers: {table.headers}\n"
             rows_to_send = table.rows[:MAX_TABLE_ROWS]
@@ -173,7 +183,7 @@ class AIExtractor:
             if table.footnotes:
                 tables_text += f"Footnotes: {table.footnotes}\n"
 
-        return f"DOCUMENT TEXT:\n{full_text}\n\nEXTRACTED TABLES:\n{tables_text}"
+        return f"DOCUMENT TEXT:\n{full_text}\n\nEXTRACTED TABLES ({fee_table_count} fee-relevant):\n{tables_text}"
 
     def extract(self, document: ExtractedDocument, exchange_code: str) -> ExtractionResult:
         """Run the extraction pipeline."""

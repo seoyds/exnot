@@ -140,6 +140,12 @@ class ScrapeStatus(str, enum.Enum):
     NO_CHANGE = "NO_CHANGE"
 
 
+class ProfileStatus(str, enum.Enum):
+    LEARNING = "LEARNING"
+    ACTIVE = "ACTIVE"
+    NEEDS_UPDATE = "NEEDS_UPDATE"
+
+
 class DiscoveryStatus(str, enum.Enum):
     NOT_DISCOVERED = "NOT_DISCOVERED"
     DISCOVERED = "DISCOVERED"
@@ -180,6 +186,9 @@ class Exchange(Base):
     fee_changes: Mapped[list["FeeChange"]] = relationship(back_populates="exchange")
     scrape_logs: Mapped[list["ScrapeLog"]] = relationship(back_populates="exchange")
     discovery_logs: Mapped[list["DiscoveryLog"]] = relationship(back_populates="exchange")
+    profile: Mapped["ExchangeProfile | None"] = relationship(
+        back_populates="exchange", uselist=False
+    )
 
 
 class FeeScheduleSnapshot(Base):
@@ -249,7 +258,7 @@ class NormalizedFee(Base):
     conditions: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     effective_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     expiry_date: Mapped[date | None] = mapped_column(Date, nullable=True)
-    section_ref: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    section_ref: Mapped[str | None] = mapped_column(String(200), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     # Legacy columns (kept for migration compatibility)
@@ -417,3 +426,27 @@ class DiscoveryLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     exchange: Mapped["Exchange"] = relationship(back_populates="discovery_logs")
+
+
+class ExchangeProfile(Base):
+    __tablename__ = "exchange_profiles"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    exchange_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("exchanges.id"), unique=True, nullable=False
+    )
+    profile_version: Mapped[int] = mapped_column(Integer, default=1)
+    table_mappings: Mapped[list] = mapped_column(JSONB, default=list)
+    table_fingerprints: Mapped[dict] = mapped_column(JSONB, default=dict)
+    section_metadata: Mapped[dict] = mapped_column(JSONB, default=dict)
+    extraction_stats: Mapped[dict] = mapped_column(JSONB, default=dict)
+    status: Mapped[ProfileStatus] = mapped_column(
+        Enum(ProfileStatus, name="profilestatus", create_constraint=False),
+        default=ProfileStatus.LEARNING,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+    exchange: Mapped["Exchange"] = relationship(back_populates="profile")

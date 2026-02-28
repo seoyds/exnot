@@ -7,6 +7,7 @@ from sqlalchemy.orm import selectinload
 
 from exnot.db.models import (
     Exchange,
+    ExchangeProfile,
     FeeChange,
     FeeScheduleSnapshot,
     NormalizedFee,
@@ -275,3 +276,33 @@ class ScrapeLogRepository:
         )
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
+
+
+class ExchangeProfileRepository:
+    """Data access for exchange profiles."""
+
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def get_by_exchange_id(self, exchange_id: uuid.UUID) -> ExchangeProfile | None:
+        stmt = select(ExchangeProfile).where(ExchangeProfile.exchange_id == exchange_id)
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def get_by_exchange_code(self, code: str) -> ExchangeProfile | None:
+        stmt = (
+            select(ExchangeProfile)
+            .join(Exchange)
+            .where(Exchange.code == code)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def create(self, profile: ExchangeProfile) -> ExchangeProfile:
+        self.session.add(profile)
+        await self.session.flush()
+        return profile
+
+    async def update(self, profile: ExchangeProfile) -> ExchangeProfile:
+        await self.session.flush()
+        return profile
