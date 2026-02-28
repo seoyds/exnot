@@ -5,7 +5,7 @@ Evaluates candidate URLs to find the official fee schedule for a US options exch
 
 from __future__ import annotations
 
-from pydantic_ai import Agent
+from pydantic_ai import Agent, ToolOutput
 
 from exnot.ai.deps import DiscoveryDeps
 from exnot.ai.types import UrlEvaluationResult
@@ -14,7 +14,7 @@ discovery_agent = Agent[DiscoveryDeps, UrlEvaluationResult](
     # Model is overridden at call site via model= parameter
     "test",
     deps_type=DiscoveryDeps,
-    output_type=UrlEvaluationResult,
+    output_type=ToolOutput(UrlEvaluationResult, name="return_evaluation"),
     instructions=(
         "You evaluate search results to find the official fee schedule for a US options exchange.\n\n"
         "RULES:\n"

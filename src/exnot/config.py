@@ -59,13 +59,14 @@ class Settings(BaseSettings):
     ai_section_char_budget: int = 15000
 
     # Per-task model routing (all OpenRouter model IDs, all < $0.40/M tokens)
-    ai_model_table_classification: str = "qwen/qwen3.5-flash-02-23"
-    ai_model_orchestrator: str = "qwen/qwen3.5-flash-02-23"
+    # DeepSeek V3.2: $0.25/M input, $0.40/M output — best quality at budget
+    ai_model_table_classification: str = "deepseek/deepseek-v3.2-20251201"
+    ai_model_orchestrator: str = "deepseek/deepseek-v3.2-20251201"
     ai_model_fee_extraction: str = "deepseek/deepseek-v3.2-20251201"
-    ai_model_fee_validation: str = "mistralai/mistral-small-3.1-24b-instruct"
+    ai_model_fee_validation: str = "deepseek/deepseek-v3.2-20251201"
     ai_model_correction: str = "deepseek/deepseek-v3.2-20251201"
-    ai_model_url_discovery: str = "qwen/qwen3.5-flash-02-23"
-    ai_model_change_summary: str = "qwen/qwen3.5-flash-02-23"
+    ai_model_url_discovery: str = "deepseek/deepseek-v3.2-20251201"
+    ai_model_change_summary: str = "deepseek/deepseek-v3.2-20251201"
 
     # Budget guardrails
     ai_budget_per_exchange_usd: float = 2.00

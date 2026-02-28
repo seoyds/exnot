@@ -16,7 +16,7 @@ class TestCostTracker:
     def test_record_adds_cost(self):
         tracker = CostTracker(exchange_code="TEST", budget_usd=2.0)
         usage = Usage(input_tokens=1000, output_tokens=200, requests=1)
-        cost = tracker.record("test_task", "qwen/qwen3.5-flash-02-23", usage)
+        cost = tracker.record("test_task", "deepseek/deepseek-v3.2-20251201", usage)
 
         assert cost >= 0
         assert tracker.total_cost_usd > 0
@@ -36,7 +36,7 @@ class TestCostTracker:
     def test_summary(self):
         tracker = CostTracker(exchange_code="TEST", budget_usd=2.0)
         usage = Usage(input_tokens=500, output_tokens=100, requests=1)
-        tracker.record("task1", "qwen/qwen3.5-flash-02-23", usage)
+        tracker.record("task1", "deepseek/deepseek-v3.2-20251201", usage)
 
         summary = tracker.summary()
         assert summary["extraction_mode"] == "AGENTIC"
@@ -50,7 +50,7 @@ class TestCostTracker:
         tracker = CostTracker(exchange_code="TEST", budget_usd=5.0)
         for i in range(3):
             usage = Usage(input_tokens=1000, output_tokens=200, requests=1)
-            tracker.record(f"task_{i}", "qwen/qwen3.5-flash-02-23", usage)
+            tracker.record(f"task_{i}", "deepseek/deepseek-v3.2-20251201", usage)
 
         assert len(tracker.calls) == 3
         assert tracker.total_input_tokens == 3000

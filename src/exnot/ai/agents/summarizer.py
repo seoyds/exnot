@@ -5,7 +5,7 @@ Generates concise natural-language summaries of fee schedule changes.
 
 from __future__ import annotations
 
-from pydantic_ai import Agent
+from pydantic_ai import Agent, ToolOutput
 
 from exnot.ai.deps import SummaryDeps
 from exnot.ai.types import ChangeSummary
@@ -13,7 +13,7 @@ from exnot.ai.types import ChangeSummary
 summarizer_agent = Agent[SummaryDeps, ChangeSummary](
     "test",
     deps_type=SummaryDeps,
-    output_type=ChangeSummary,
+    output_type=ToolOutput(ChangeSummary, name="return_summary"),
     instructions=(
         "You summarize fee schedule changes for US options exchanges.\n"
         "Write 2-3 concise sentences for financial professionals.\n"

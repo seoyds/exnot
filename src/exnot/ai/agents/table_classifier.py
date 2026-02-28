@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import logging
 
-from pydantic_ai import Agent
+from pydantic_ai import Agent, ToolOutput
+from pydantic_ai.settings import ModelSettings
 
 from exnot.ai.deps import ExtractionDeps
 from exnot.ai.types import TableClassification
@@ -20,7 +21,7 @@ logger = logging.getLogger(__name__)
 # AI agent for ambiguous tables only
 ai_classifier_agent = Agent[None, TableClassification](
     "test",
-    output_type=TableClassification,
+    output_type=ToolOutput(TableClassification, name="return_classification"),
     instructions=(
         "You classify tables from US options exchange fee schedules.\n"
         "Determine if the table contains per-contract transaction fees/rebates.\n\n"
@@ -35,7 +36,7 @@ ai_classifier_agent = Agent[None, TableClassification](
 )
 
 
-def classify_tables_hybrid(
+async def classify_tables_hybrid(
     tables: list[ExtractedTable],
     deps: ExtractionDeps | None = None,
 ) -> list[TableClassification]:
@@ -66,7 +67,7 @@ def classify_tables_hybrid(
 
         # Ambiguous (score is -1, 0, or 1): use AI if available
         if deps is not None and not deps.cost_tracker.is_over_budget:
-            ai_result = _classify_with_ai(table, i, deps)
+            ai_result = await _classify_with_ai(table, i, deps)
             if ai_result is not None:
                 results.append(ai_result)
                 continue
@@ -83,7 +84,7 @@ def classify_tables_hybrid(
     return results
 
 
-def _classify_with_ai(
+async def _classify_with_ai(
     table: ExtractedTable,
     table_index: int,
     deps: ExtractionDeps,
@@ -105,11 +106,11 @@ def _classify_with_ai(
     )
 
     try:
-        import asyncio
-
         model = deps.model_registry.get_model(TaskType.TABLE_CLASSIFICATION)
-        result = asyncio.get_event_loop().run_until_complete(
-            ai_classifier_agent.run(prompt, model=model)
+        result = await ai_classifier_agent.run(
+            prompt,
+            model=model,
+            model_settings=ModelSettings(max_tokens=4096),
         )
 
         # Track cost

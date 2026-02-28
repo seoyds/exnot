@@ -6,7 +6,7 @@ This is the core value task — it does the actual fee extraction.
 
 from __future__ import annotations
 
-from pydantic_ai import Agent, ModelRetry, RunContext
+from pydantic_ai import Agent, ModelRetry, RunContext, ToolOutput
 
 from exnot.ai.deps import ExtractionDeps
 from exnot.ai.types import SectionExtractionResult
@@ -35,7 +35,7 @@ RULES:
 section_extractor_agent = Agent[ExtractionDeps, SectionExtractionResult](
     "test",
     deps_type=ExtractionDeps,
-    output_type=SectionExtractionResult,
+    output_type=ToolOutput(SectionExtractionResult, name="return_extraction"),
     instructions=(
         "You are a financial data extraction specialist for US options exchange fee schedules.\n"
         "Analyze the provided section and extract ALL fee and rebate amounts.\n\n"
@@ -43,7 +43,7 @@ section_extractor_agent = Agent[ExtractionDeps, SectionExtractionResult](
         "If a REFERENCE CONTEXT section is provided, use it for interpretation "
         "(definitions, footnotes, glossary) but do NOT extract fees from it.\n"
     ),
-    retries=2,
+    retries=4,
 )
 
 

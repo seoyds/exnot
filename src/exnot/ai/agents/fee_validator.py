@@ -6,7 +6,7 @@ _compute_confidence and _identify_issues functions.
 
 from __future__ import annotations
 
-from pydantic_ai import Agent
+from pydantic_ai import Agent, ToolOutput
 
 from exnot.ai.deps import ExtractionDeps
 from exnot.ai.types import ValidationResult
@@ -14,7 +14,7 @@ from exnot.ai.types import ValidationResult
 fee_validator_agent = Agent[ExtractionDeps, ValidationResult](
     "test",
     deps_type=ExtractionDeps,
-    output_type=ValidationResult,
+    output_type=ToolOutput(ValidationResult, name="return_validation"),
     instructions=(
         "You validate extracted fee data from US options exchange fee schedules.\n"
         "Check for completeness and correctness:\n\n"

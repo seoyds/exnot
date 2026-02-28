@@ -6,7 +6,7 @@ returns targeted fixes. Replaces the SELF_QUESTION_PROMPT loop.
 
 from __future__ import annotations
 
-from pydantic_ai import Agent
+from pydantic_ai import Agent, ToolOutput
 
 from exnot.ai.deps import ExtractionDeps
 from exnot.ai.types import CorrectionResult
@@ -14,7 +14,7 @@ from exnot.ai.types import CorrectionResult
 correction_agent = Agent[ExtractionDeps, CorrectionResult](
     "test",
     deps_type=ExtractionDeps,
-    output_type=CorrectionResult,
+    output_type=ToolOutput(CorrectionResult, name="return_corrections"),
     instructions=(
         "You correct and supplement fee data extracted from US options exchange fee schedules.\n\n"
         "You will receive:\n"

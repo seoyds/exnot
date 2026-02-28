@@ -11,13 +11,13 @@ def _make_settings(**overrides):
     settings.openrouter_api_key = "test-key"
     settings.openrouter_base_url = "https://openrouter.ai/api/v1"
     settings.ai_model = "deepseek/deepseek-v3.2-20251201"
-    settings.ai_model_table_classification = "qwen/qwen3.5-flash-02-23"
-    settings.ai_model_orchestrator = "qwen/qwen3.5-flash-02-23"
+    settings.ai_model_table_classification = "deepseek/deepseek-v3.2-20251201"
+    settings.ai_model_orchestrator = "deepseek/deepseek-v3.2-20251201"
     settings.ai_model_fee_extraction = "deepseek/deepseek-v3.2-20251201"
-    settings.ai_model_fee_validation = "mistralai/mistral-small-3.1-24b-instruct"
+    settings.ai_model_fee_validation = "deepseek/deepseek-v3.2-20251201"
     settings.ai_model_correction = "deepseek/deepseek-v3.2-20251201"
-    settings.ai_model_url_discovery = "qwen/qwen3.5-flash-02-23"
-    settings.ai_model_change_summary = "qwen/qwen3.5-flash-02-23"
+    settings.ai_model_url_discovery = "deepseek/deepseek-v3.2-20251201"
+    settings.ai_model_change_summary = "deepseek/deepseek-v3.2-20251201"
     for k, v in overrides.items():
         setattr(settings, k, v)
     return settings
@@ -28,9 +28,9 @@ class TestModelRegistry:
         settings = _make_settings()
         registry = ModelRegistry(settings)
 
-        assert registry.get_model_name(TaskType.TABLE_CLASSIFICATION) == "qwen/qwen3.5-flash-02-23"
+        assert registry.get_model_name(TaskType.TABLE_CLASSIFICATION) == "deepseek/deepseek-v3.2-20251201"
         assert registry.get_model_name(TaskType.FEE_EXTRACTION) == "deepseek/deepseek-v3.2-20251201"
-        assert registry.get_model_name(TaskType.FEE_VALIDATION) == "mistralai/mistral-small-3.1-24b-instruct"
+        assert registry.get_model_name(TaskType.FEE_VALIDATION) == "deepseek/deepseek-v3.2-20251201"
 
     def test_get_model_returns_instance(self):
         settings = _make_settings()
@@ -46,15 +46,15 @@ class TestModelRegistry:
         model1 = registry.get_model(TaskType.ORCHESTRATOR)
         model2 = registry.get_model(TaskType.TABLE_CLASSIFICATION)
 
-        # Same model name (both qwen3.5-flash) -> same cached instance
+        # Same model name -> same cached instance
         assert model1 is model2
 
     def test_different_models_not_shared(self):
-        settings = _make_settings()
+        settings = _make_settings(ai_model_fee_extraction="anthropic/claude-sonnet-4-20250514")
         registry = ModelRegistry(settings)
 
-        cheap = registry.get_model(TaskType.ORCHESTRATOR)  # qwen3.5-flash
-        expensive = registry.get_model(TaskType.FEE_EXTRACTION)  # deepseek-v3.2
+        cheap = registry.get_model(TaskType.ORCHESTRATOR)  # deepseek
+        expensive = registry.get_model(TaskType.FEE_EXTRACTION)  # claude-sonnet
 
         assert cheap is not expensive
 

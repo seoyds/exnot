@@ -10,6 +10,7 @@ import json
 import logging
 
 from pydantic_ai import Agent, ModelRetry, RunContext
+from pydantic_ai.settings import ModelSettings
 
 from exnot.ai.deps import ExtractionDeps
 from exnot.ai.models import TaskType
@@ -41,7 +42,7 @@ orchestrator_agent = Agent[ExtractionDeps, OrchestratorResult](
         "- Return the final merged result.\n\n"
         "IMPORTANT: Your final output should contain ALL extracted fees merged and deduplicated.\n"
     ),
-    retries=2,
+    retries=4,
 )
 
 
@@ -54,7 +55,7 @@ async def classify_tables(ctx: RunContext[ExtractionDeps]) -> list[dict]:
     if not tables:
         return [{"message": "No tables in document"}]
 
-    classifications = classify_tables_hybrid(tables, deps=ctx.deps)
+    classifications = await classify_tables_hybrid(tables, deps=ctx.deps)
     return [c.model_dump() for c in classifications]
 
 
@@ -175,6 +176,7 @@ async def extract_section(
         deps=ctx.deps,
         model=model,
         usage=ctx.usage,
+        model_settings=ModelSettings(max_tokens=16384),
     )
 
     # Track cost
@@ -211,6 +213,7 @@ async def validate_extraction(
         deps=ctx.deps,
         model=model,
         usage=ctx.usage,
+        model_settings=ModelSettings(max_tokens=8192),
     )
 
     model_name = ctx.deps.model_registry.get_model_name(TaskType.FEE_VALIDATION)
@@ -265,6 +268,7 @@ async def correct_extraction(
         deps=ctx.deps,
         model=model,
         usage=ctx.usage,
+        model_settings=ModelSettings(max_tokens=16384),
     )
 
     model_name = ctx.deps.model_registry.get_model_name(TaskType.CORRECTION)

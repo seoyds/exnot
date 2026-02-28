@@ -89,10 +89,13 @@ class AIExtractor:
         model = registry.get_model(TaskType.ORCHESTRATOR)
         logger.info(f"[{exchange_code}] Starting agentic extraction pipeline")
 
+        from pydantic_ai.settings import ModelSettings
+
         agent_result = await orchestrator_agent.run(
             prompt,
             deps=deps,
             model=model,
+            model_settings=ModelSettings(max_tokens=16384),
         )
 
         # Track orchestrator cost
