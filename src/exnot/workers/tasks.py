@@ -146,6 +146,16 @@ def scrape_and_process_exchange(self, exchange_code: str):
     Delegates the core logic to run_scrape_pipeline() and then triggers
     notifications if changes were detected.
     """
+    # Dedup: skip if another worker is already processing this exchange
+    import redis
+
+    redis_client = redis.from_url(celery_app.conf.broker_url)
+    lock_key = f"exnot:scrape_lock:{exchange_code}"
+    lock = redis_client.lock(lock_key, timeout=1800, blocking=False)
+    if not lock.acquire(blocking=False):
+        logger.info(f"[{exchange_code}] Skipping — another worker is already processing this exchange")
+        return {"exchange_code": exchange_code, "skipped": True, "reason": "duplicate"}
+
     logger.info(f"[{exchange_code}] Starting scrape and process pipeline")
 
     session = get_sync_session()
@@ -186,6 +196,10 @@ def scrape_and_process_exchange(self, exchange_code: str):
         raise self.retry(exc=exc)
     finally:
         session.close()
+        try:
+            lock.release()
+        except Exception:
+            pass  # Lock may have expired
 
 
 def _record_failure_log(exchange_code: str, session, error_message: str):

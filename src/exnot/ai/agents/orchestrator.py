@@ -234,7 +234,16 @@ async def validate_extraction(
     """Validate all extracted fees for completeness and correctness.
 
     Uses the accumulated fees from all previous extract_section calls.
+    IMPORTANT: Only call AFTER extracting ALL groups via extract_section.
     """
+    if not ctx.deps.extracted_fees:
+        return {
+            "is_valid": False,
+            "confidence": 0.0,
+            "issues": [{"severity": "ERROR", "message": "No fees extracted yet. Call extract_section first."}],
+            "suggested_actions": ["Call extract_section for each group in the section plan before validating."],
+        }
+
     from exnot.ai.agents.fee_validator import fee_validator_agent
 
     fees_json = json.dumps(ctx.deps.extracted_fees)
@@ -328,7 +337,16 @@ async def validate_orchestrator_output(
     if not accumulated:
         raise ModelRetry(
             "No fees extracted. You must call extract_section on at least one section. "
-            "Call get_document_sections first, then extract_section."
+            "Call extract_section for EACH group in the section plan."
+        )
+
+    # Check that enough groups were extracted (at least half of expected groups)
+    expected_groups = len(ctx.deps.section_groups)
+    if expected_groups > 1 and len(accumulated) < 5:
+        raise ModelRetry(
+            f"Only {len(accumulated)} fees extracted from {expected_groups} groups — "
+            f"this is too few. You must call extract_section for EACH group listed "
+            f"in the section plan. Do NOT skip groups."
         )
 
     # Check for minimum fee variety
