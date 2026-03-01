@@ -73,6 +73,19 @@ class HtmlParser(AbstractParser):
         headers = rows_data[0]
         rows = rows_data[1:]
 
+        # Skip layout/navigation tables: too many columns or cells with huge text
+        if len(headers) > 20:
+            logger.debug(f"Skipping table with {len(headers)} columns (likely layout table)")
+            return None
+
+        max_cell_len = max(
+            (len(cell) for row in rows_data for cell in row),
+            default=0,
+        )
+        if max_cell_len > 5000:
+            logger.debug(f"Skipping table with cell of {max_cell_len} chars (likely layout table)")
+            return None
+
         # Collect footnotes from the table's container
         footnotes = []
         parent = table.parent

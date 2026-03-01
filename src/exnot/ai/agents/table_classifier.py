@@ -92,10 +92,10 @@ async def _classify_with_ai(
     """Use AI to classify an ambiguous table."""
     from exnot.ai.models import TaskType
 
-    # Build compact table representation
-    headers = " | ".join(table.headers) if table.headers else "(no headers)"
+    # Build compact table representation (truncate cells to avoid token bloat)
+    headers = " | ".join(h[:100] for h in table.headers[:15]) if table.headers else "(no headers)"
     sample_rows = "\n".join(
-        " | ".join(str(c) for c in row)
+        " | ".join(str(c)[:200] for c in row[:15])
         for row in table.rows[:3]
     )
     prompt = (

@@ -154,19 +154,6 @@ class AIExtractor:
         sections: list | None = None, section_groups: list | None = None,
     ) -> str:
         """Build a compact prompt for the orchestrator with pre-computed section plan."""
-        # Orchestrator gets a summary, not the full document (that's what tools are for)
-        table_summaries = []
-        for i, table in enumerate(document.tables[:20]):
-            headers = " | ".join(table.headers[:8]) if table.headers else "(no headers)"
-            table_summaries.append(
-                f"  Table {i}: {table.title or '(untitled)'} — {len(table.rows)} rows — {headers}"
-            )
-
-        tables_text = "\n".join(table_summaries) if table_summaries else "  (no tables)"
-
-        # First 2000 chars of text for headings/structure overview
-        text_preview = document.full_text[:2000]
-
         markdown = document.metadata.get("markdown")
         format_info = "Docling markdown" if markdown else "PDF/HTML text + tables"
 
@@ -175,21 +162,16 @@ class AIExtractor:
             f"Document format: {format_info}",
             f"Text length: {len(document.full_text)} chars",
             f"Tables: {len(document.tables)}",
-            tables_text,
-            f"\nText preview (first 2000 chars):\n{text_preview}\n",
         ]
 
-        # Include pre-computed section plan so orchestrator knows exactly what to extract
+        # Include pre-computed section plan — only groups, not individual sections
         if sections and section_groups:
-            prompt_parts.append("== PRE-COMPUTED SECTION PLAN ==")
-            prompt_parts.append(f"Total sections: {len(sections)}")
-
-            for i, s in enumerate(sections):
-                label = "(context)" if s.is_context else "(fee-bearing)"
-                prompt_parts.append(
-                    f"  Section {i}: {s.heading[:80]} — {s.char_count} chars, "
-                    f"{len(s.tables)} tables {label}"
-                )
+            fee_count = sum(1 for s in sections if not s.is_context)
+            ctx_count = sum(1 for s in sections if s.is_context)
+            prompt_parts.append(
+                f"\n== PRE-COMPUTED SECTION PLAN ==\n"
+                f"Sections: {len(sections)} total ({fee_count} fee-bearing, {ctx_count} context)"
+            )
 
             prompt_parts.append(f"\nExtraction groups ({len(section_groups)}):")
             for gi, group in enumerate(section_groups):

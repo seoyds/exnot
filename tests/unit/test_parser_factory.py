@@ -108,8 +108,8 @@ def test_ai_extractor_orchestrator_prompt_mentions_format():
     assert "TEST_EX" in prompt
 
 
-def test_ai_extractor_orchestrator_prompt_includes_table_summary():
-    """AI extractor orchestrator prompt should include table summaries."""
+def test_ai_extractor_orchestrator_prompt_includes_table_count():
+    """AI extractor orchestrator prompt should include table count."""
     from exnot.parser.ai_extractor import AIExtractor
     from exnot.parser.base import ExtractedDocument, ExtractedTable
 
@@ -129,4 +129,4 @@ def test_ai_extractor_orchestrator_prompt_includes_table_summary():
     prompt = extractor._build_orchestrator_prompt(doc, "TEST_EX")
 
     assert "Tables: 1" in prompt
-    assert "Fees" in prompt
+    assert "TEST_EX" in prompt
