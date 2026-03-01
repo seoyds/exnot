@@ -25,6 +25,8 @@ class ExtractionDeps:
     # Pre-computed sections and groups (set by AIExtractor before orchestrator runs)
     sections: list[DocumentSection] = field(default_factory=list)
     section_groups: list[SectionGroup] = field(default_factory=list)
+    # Accumulator for extracted fees (stored here to avoid bloating orchestrator context)
+    extracted_fees: list[dict] = field(default_factory=list)
 
 
 @dataclass

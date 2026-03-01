@@ -128,10 +128,15 @@ class AIExtractor:
 
         typed_output = agent_result.output
 
+        # Fees are accumulated in deps.extracted_fees (not in orchestrator output)
+        raw_fees = deps.extracted_fees if deps.extracted_fees else [
+            fee.model_dump() for fee in typed_output.fees
+        ]
+
         # Convert typed output -> legacy ExtractionResult
         result = ExtractionResult(
-            raw_fees=[fee.model_dump() for fee in typed_output.fees],
-            confidence=typed_output.validation_confidence or self._compute_confidence_heuristic(typed_output),
+            raw_fees=raw_fees,
+            confidence=typed_output.validation_confidence or self._compute_confidence_from_fees(raw_fees),
             exchange_name=typed_output.exchange_name,
             effective_date=typed_output.effective_date,
             extraction_notes=typed_output.extraction_notes,
@@ -199,15 +204,14 @@ class AIExtractor:
 
         return "\n".join(prompt_parts)
 
-    def _compute_confidence_heuristic(self, output) -> float:
+    def _compute_confidence_from_fees(self, raw_fees: list[dict]) -> float:
         """Fallback heuristic confidence if validator didn't run."""
-        fees = output.fees
-        if not fees:
+        if not raw_fees:
             return 0.0
 
         score = 1.0
-        participant_types = {f.participant_type for f in fees}
-        fee_types = {f.fee_type for f in fees}
+        participant_types = {f.get("participant_type") for f in raw_fees}
+        fee_types = {f.get("fee_type") for f in raw_fees}
 
         if "CUSTOMER" not in participant_types:
             score -= 0.3
@@ -217,9 +221,9 @@ class AIExtractor:
             score -= 0.2
         if len(participant_types) < 2:
             score -= 0.15
-        if len(fees) < 4:
+        if len(raw_fees) < 4:
             score -= 0.2
-        elif len(fees) < 10:
+        elif len(raw_fees) < 10:
             score -= 0.1
 
         return max(0.0, min(1.0, score))

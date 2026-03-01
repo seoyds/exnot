@@ -31,17 +31,17 @@ orchestrator_agent = Agent[ExtractionDeps, OrchestratorResult](
         "1. classify_tables — classify which tables contain transaction fees\n"
         "2. get_document_sections — split the document into logical sections\n"
         "3. extract_section — extract fees from a section (calls an expensive AI model)\n"
-        "4. validate_extraction — validate extracted fees for completeness\n"
+        "4. validate_extraction — validate ALL accumulated fees for completeness\n"
         "5. correct_extraction — fix issues found by validation (expensive, budget-gated)\n\n"
         "STRATEGY:\n"
         "- The document has been PRE-SPLIT into section groups. The prompt includes the section plan.\n"
         "- You MUST call extract_section ONCE for EACH group listed in the plan.\n"
         "- Do NOT combine groups or pass all section indices in a single call.\n"
         "- Do NOT skip any fee-bearing groups.\n"
-        "- After all groups are extracted, merge the results and call validate_extraction.\n"
-        "- If validation finds issues and budget allows, call correct_extraction.\n"
-        "- Return the final merged result.\n\n"
-        "IMPORTANT: Your final output should contain ALL extracted fees merged and deduplicated.\n"
+        "- extract_section stores fees internally and returns a count summary.\n"
+        "- After all groups are extracted, call validate_extraction (no arguments needed).\n"
+        "- If validation finds issues and budget allows, call correct_extraction with the issues.\n"
+        "- For your final output, set fees=[] — the system uses the internally stored fees.\n"
     ),
     retries=4,
 )
@@ -214,24 +214,33 @@ async def extract_section(
         usage=result.usage(),
     )
 
-    return result.output.model_dump()
+    # Store full results in deps (avoids bloating orchestrator conversation context)
+    output = result.output
+    fee_dicts = [f.model_dump() for f in output.fees]
+    ctx.deps.extracted_fees.extend(fee_dicts)
+
+    # Return only a compact summary to the orchestrator
+    return {
+        "fees_extracted": len(output.fees),
+        "extraction_notes": output.extraction_notes or "",
+        "total_fees_so_far": len(ctx.deps.extracted_fees),
+    }
 
 
 @orchestrator_agent.tool
 async def validate_extraction(
     ctx: RunContext[ExtractionDeps],
-    fees_json: str,
 ) -> dict:
-    """Validate extracted fees for completeness and correctness.
+    """Validate all extracted fees for completeness and correctness.
 
-    Args:
-        fees_json: JSON string of the extracted fees array.
+    Uses the accumulated fees from all previous extract_section calls.
     """
     from exnot.ai.agents.fee_validator import fee_validator_agent
 
+    fees_json = json.dumps(ctx.deps.extracted_fees)
     prompt = (
         f"Validate these extracted fees for {ctx.deps.exchange_code}.\n\n"
-        f"Extracted fees ({len(json.loads(fees_json))} entries):\n{fees_json}\n"
+        f"Extracted fees ({len(ctx.deps.extracted_fees)} entries):\n{fees_json}\n"
     )
 
     model = ctx.deps.model_registry.get_model(TaskType.FEE_VALIDATION)
@@ -256,13 +265,13 @@ async def validate_extraction(
 @orchestrator_agent.tool
 async def correct_extraction(
     ctx: RunContext[ExtractionDeps],
-    previous_fees_json: str,
     issues_description: str,
 ) -> dict:
     """Fix specific issues in previously extracted fees. Budget-gated — only call if validation found issues.
 
+    Uses the accumulated fees from deps. Pass the issues description from validation.
+
     Args:
-        previous_fees_json: JSON string of the previously extracted fees.
         issues_description: Description of the specific issues to fix.
     """
     from exnot.ai.agents.correction import correction_agent
@@ -278,10 +287,11 @@ async def correct_extraction(
     # Build context from document
     doc = ctx.deps.document
     doc_context = doc.full_text[:30000]
+    fees_json = json.dumps(ctx.deps.extracted_fees)
 
     prompt = (
         f"Previous extraction for {ctx.deps.exchange_code}:\n"
-        f"{previous_fees_json}\n\n"
+        f"{fees_json}\n\n"
         f"Issues identified:\n{issues_description}\n\n"
         f"Document context:\n{doc_context}\n"
     )
@@ -312,26 +322,27 @@ async def correct_extraction(
 async def validate_orchestrator_output(
     ctx: RunContext[ExtractionDeps], output: OrchestratorResult
 ) -> OrchestratorResult:
-    """Validate the orchestrator's final output for basic completeness."""
-    issues: list[str] = []
-
-    if not output.fees:
+    """Validate extraction and populate output from accumulated fees in deps."""
+    # Fees are stored in deps.extracted_fees, not in output.fees
+    accumulated = ctx.deps.extracted_fees
+    if not accumulated:
         raise ModelRetry(
             "No fees extracted. You must call extract_section on at least one section. "
             "Call get_document_sections first, then extract_section."
         )
 
     # Check for minimum fee variety
-    participant_types = {f.participant_type for f in output.fees}
-    fee_types = {f.fee_type for f in output.fees}
+    participant_types = {f.get("participant_type") for f in accumulated}
+    fee_types = {f.get("fee_type") for f in accumulated}
+    issues: list[str] = []
 
-    if "CUSTOMER" not in participant_types and len(output.fees) > 5:
+    if "CUSTOMER" not in participant_types and len(accumulated) > 5:
         issues.append(
             "Missing CUSTOMER fees — most exchanges have Customer/Retail fees. "
             "Check if the document uses 'Priority Customer' or 'Public Customer'."
         )
 
-    if "MAKER" not in fee_types and "TAKER" not in fee_types and len(output.fees) > 5:
+    if "MAKER" not in fee_types and "TAKER" not in fee_types and len(accumulated) > 5:
         issues.append(
             "Missing both MAKER and TAKER fees — most exchanges have maker/taker pricing."
         )
