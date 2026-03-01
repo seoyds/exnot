@@ -26,22 +26,17 @@ orchestrator_agent = Agent[ExtractionDeps, OrchestratorResult](
     deps_type=ExtractionDeps,
     output_type=OrchestratorResult,
     instructions=(
-        "You are coordinating the extraction of fee data from a US options exchange fee schedule.\n\n"
-        "You have tools to:\n"
-        "1. classify_tables — classify which tables contain transaction fees\n"
-        "2. get_document_sections — split the document into logical sections\n"
-        "3. extract_section — extract fees from a section (calls an expensive AI model)\n"
-        "4. validate_extraction — validate ALL accumulated fees for completeness\n"
-        "5. correct_extraction — fix issues found by validation (expensive, budget-gated)\n\n"
-        "STRATEGY:\n"
-        "- The document has been PRE-SPLIT into section groups. The prompt includes the section plan.\n"
-        "- You MUST call extract_section ONCE for EACH group listed in the plan.\n"
-        "- Do NOT combine groups or pass all section indices in a single call.\n"
-        "- Do NOT skip any fee-bearing groups.\n"
+        "You coordinate fee data extraction from a US options exchange fee schedule.\n\n"
+        "REQUIRED WORKFLOW — follow these steps IN ORDER:\n"
+        "Step 1: Call extract_section once for EACH group listed in the prompt's section plan.\n"
+        "Step 2: After ALL groups are extracted, call validate_extraction.\n"
+        "Step 3: If validation finds issues, call correct_extraction.\n"
+        "Step 4: Return your final output with fees=[] (the system uses internally stored fees).\n\n"
+        "RULES:\n"
+        "- Do NOT call classify_tables or get_document_sections — the section plan is already provided.\n"
+        "- Do NOT skip any groups. Extract EVERY group.\n"
+        "- Do NOT call validate_extraction before extracting ALL groups.\n"
         "- extract_section stores fees internally and returns a count summary.\n"
-        "- After all groups are extracted, call validate_extraction (no arguments needed).\n"
-        "- If validation finds issues and budget allows, call correct_extraction with the issues.\n"
-        "- For your final output, set fees=[] — the system uses the internally stored fees.\n"
     ),
     retries=4,
 )
@@ -50,6 +45,10 @@ orchestrator_agent = Agent[ExtractionDeps, OrchestratorResult](
 @orchestrator_agent.tool
 async def classify_tables(ctx: RunContext[ExtractionDeps]) -> list[dict]:
     """Classify document tables as fee-relevant or not. Returns classification for each table."""
+    # Return cached result if already classified (avoids duplicate AI calls on retry)
+    if ctx.deps.table_classifications is not None:
+        return ctx.deps.table_classifications
+
     from exnot.ai.agents.table_classifier import classify_tables_hybrid
 
     tables = ctx.deps.document.tables
@@ -57,7 +56,9 @@ async def classify_tables(ctx: RunContext[ExtractionDeps]) -> list[dict]:
         return [{"message": "No tables in document"}]
 
     classifications = await classify_tables_hybrid(tables, deps=ctx.deps)
-    return [c.model_dump() for c in classifications]
+    result = [c.model_dump() for c in classifications]
+    ctx.deps.table_classifications = result
+    return result
 
 
 @orchestrator_agent.tool

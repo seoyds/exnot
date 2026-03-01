@@ -27,6 +27,8 @@ class ExtractionDeps:
     section_groups: list[SectionGroup] = field(default_factory=list)
     # Accumulator for extracted fees (stored here to avoid bloating orchestrator context)
     extracted_fees: list[dict] = field(default_factory=list)
+    # Cache for table classifications (avoid repeated AI calls on orchestrator retry)
+    table_classifications: list[dict] | None = None
 
 
 @dataclass
