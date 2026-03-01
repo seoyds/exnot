@@ -7,7 +7,7 @@ from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
 
-from exnot.db.models import Exchange, ScraperType
+from exnot.db.models import Exchange, FeeScheduleFormat, ScraperType
 from exnot.scraper.base import (
     FORMAT_PRIORITY,
     CollectionResult,
@@ -16,6 +16,14 @@ from exnot.scraper.base import (
 )
 from exnot.scraper.browser_scraper import BrowserScraper
 from exnot.scraper.http_scraper import HttpScraper
+
+# Maps exchange-declared format to scraper content type.
+_FORMAT_TO_CONTENT_TYPE: dict[FeeScheduleFormat, ContentType] = {
+    FeeScheduleFormat.PDF: ContentType.PDF,
+    FeeScheduleFormat.HTML: ContentType.HTML,
+    FeeScheduleFormat.CSV: ContentType.CSV,
+    FeeScheduleFormat.EXCEL: ContentType.EXCEL,
+}
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +80,18 @@ class DocumentCollector:
                 unique.append(doc)
 
         # --- 5. Select primary by format priority ---
-        primary = max(unique, key=lambda d: FORMAT_PRIORITY.get(d.content_type, 0))
+        # When the exchange declares a specific format (e.g. HTML), prefer
+        # documents matching that format.  Only fall back to generic priority
+        # when no matching document is found.
+        preferred_ct = _FORMAT_TO_CONTENT_TYPE.get(exchange.fee_schedule_format)
+        if preferred_ct:
+            preferred_docs = [d for d in unique if d.content_type == preferred_ct]
+            if preferred_docs:
+                primary = preferred_docs[0]
+            else:
+                primary = max(unique, key=lambda d: FORMAT_PRIORITY.get(d.content_type, 0))
+        else:
+            primary = max(unique, key=lambda d: FORMAT_PRIORITY.get(d.content_type, 0))
 
         logger.info(
             f"[{exchange.code}] Collected {len(unique)} unique document(s). "
