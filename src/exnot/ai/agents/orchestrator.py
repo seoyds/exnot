@@ -34,10 +34,11 @@ orchestrator_agent = Agent[ExtractionDeps, OrchestratorResult](
         "4. validate_extraction — validate extracted fees for completeness\n"
         "5. correct_extraction — fix issues found by validation (expensive, budget-gated)\n\n"
         "STRATEGY:\n"
-        "- First call get_document_sections to understand document structure.\n"
-        "- For small documents (1-2 sections), call extract_section once with the full content.\n"
-        "- For large documents, call extract_section for each section group.\n"
-        "- After extraction, call validate_extraction to check completeness.\n"
+        "- The document has been PRE-SPLIT into section groups. The prompt includes the section plan.\n"
+        "- You MUST call extract_section ONCE for EACH group listed in the plan.\n"
+        "- Do NOT combine groups or pass all section indices in a single call.\n"
+        "- Do NOT skip any fee-bearing groups.\n"
+        "- After all groups are extracted, merge the results and call validate_extraction.\n"
         "- If validation finds issues and budget allows, call correct_extraction.\n"
         "- Return the final merged result.\n\n"
         "IMPORTANT: Your final output should contain ALL extracted fees merged and deduplicated.\n"
@@ -62,16 +63,19 @@ async def classify_tables(ctx: RunContext[ExtractionDeps]) -> list[dict]:
 @orchestrator_agent.tool
 async def get_document_sections(ctx: RunContext[ExtractionDeps]) -> list[dict]:
     """Split document into logical sections. Returns section headings and char counts."""
-    from exnot.parser.section_splitter import (
-        classify_context_sections,
-        split_document,
-    )
+    # Use pre-computed sections from deps (set by AIExtractor) or split on-demand
+    if ctx.deps.sections:
+        sections = ctx.deps.sections
+    else:
+        from exnot.parser.section_splitter import (
+            classify_context_sections,
+            split_document,
+        )
 
-    document = ctx.deps.document
-    format_hint = document.metadata.get("parser", "pdf")
-
-    sections = split_document(document, format_hint=format_hint)
-    sections = classify_context_sections(sections)
+        document = ctx.deps.document
+        format_hint = document.metadata.get("parser", "pdf")
+        sections = split_document(document, format_hint=format_hint)
+        sections = classify_context_sections(sections)
 
     return [
         {
@@ -98,19 +102,22 @@ async def extract_section(
         section_info: Brief description of what sections are being extracted.
     """
     from exnot.ai.agents.section_extractor import section_extractor_agent
-    from exnot.parser.section_splitter import (
-        classify_context_sections,
-        split_document,
-    )
 
-    document = ctx.deps.document
-    format_hint = document.metadata.get("parser", "pdf")
+    # Use pre-computed sections from deps (set by AIExtractor) or split on-demand
+    if ctx.deps.sections:
+        all_sections = ctx.deps.sections
+    else:
+        from exnot.parser.section_splitter import (
+            classify_context_sections,
+            split_document,
+        )
 
-    sections = split_document(document, format_hint=format_hint)
-    sections = classify_context_sections(sections)
+        document = ctx.deps.document
+        format_hint = document.metadata.get("parser", "pdf")
+        all_sections = split_document(document, format_hint=format_hint)
+        all_sections = classify_context_sections(all_sections)
 
-    context_sections = [s for s in sections if s.is_context]
-    all_sections = sections
+    context_sections = [s for s in all_sections if s.is_context]
 
     # Build context text from definitions/footnotes
     context_parts: list[str] = []
@@ -128,6 +135,26 @@ async def extract_section(
     target_sections = [all_sections[i] for i in section_indices if i < len(all_sections)]
     if not target_sections:
         return {"fees": [], "extraction_notes": "No valid sections found"}
+
+    # Hard cap: refuse calls that would send too much content to the extractor
+    from exnot.config import get_settings
+
+    char_budget = get_settings().ai_section_char_budget
+    total_chars = sum(s.char_count for s in target_sections)
+    max_allowed = char_budget * 3  # 3x budget as hard ceiling
+    if total_chars > max_allowed:
+        logger.warning(
+            f"[{ctx.deps.exchange_code}] extract_section refused: "
+            f"{total_chars} chars > {max_allowed} max for indices {section_indices}"
+        )
+        return {
+            "fees": [],
+            "extraction_notes": (
+                f"REFUSED: Combined section content ({total_chars} chars) exceeds "
+                f"maximum ({max_allowed} chars). Call extract_section with fewer "
+                f"sections — use the pre-computed groups from the section plan."
+            ),
+        }
 
     # Build section content
     section_text_parts: list[str] = []

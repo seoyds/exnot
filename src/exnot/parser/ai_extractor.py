@@ -64,6 +64,11 @@ class AIExtractor:
         from exnot.ai.deps import ExtractionDeps
         from exnot.ai.models import ModelRegistry, TaskType
         from exnot.parser.extraction_hints import get_hints_for_exchange
+        from exnot.parser.section_splitter import (
+            classify_context_sections,
+            group_sections,
+            split_document,
+        )
 
         settings = get_settings()
         registry = ModelRegistry(settings)
@@ -75,16 +80,31 @@ class AIExtractor:
         hints = get_hints_for_exchange(exchange_code)
         exchange_hints = hints.get("prompt_addition", "")
 
+        # Pre-split document into sections and groups BEFORE the orchestrator runs
+        format_hint = document.metadata.get("parser", "pdf")
+        sections = split_document(document, format_hint=format_hint)
+        sections = classify_context_sections(sections)
+        fee_sections = [s for s in sections if not s.is_context]
+        section_groups = group_sections(fee_sections, char_budget=settings.ai_section_char_budget)
+
+        logger.info(
+            f"[{exchange_code}] Pre-split: {len(sections)} sections, "
+            f"{len(fee_sections)} fee-bearing, {len(section_groups)} groups "
+            f"(budget={settings.ai_section_char_budget} chars/group)"
+        )
+
         deps = ExtractionDeps(
             model_registry=registry,
             cost_tracker=cost_tracker,
             exchange_code=exchange_code,
             exchange_hints=exchange_hints,
             document=document,
+            sections=sections,
+            section_groups=section_groups,
         )
 
-        # Build orchestrator prompt with document summary
-        prompt = self._build_orchestrator_prompt(document, exchange_code)
+        # Build orchestrator prompt with pre-computed section plan
+        prompt = self._build_orchestrator_prompt(document, exchange_code, sections, section_groups)
 
         model = registry.get_model(TaskType.ORCHESTRATOR)
         logger.info(f"[{exchange_code}] Starting agentic extraction pipeline")
@@ -130,9 +150,10 @@ class AIExtractor:
         return result
 
     def _build_orchestrator_prompt(
-        self, document: ExtractedDocument, exchange_code: str
+        self, document: ExtractedDocument, exchange_code: str,
+        sections: list | None = None, section_groups: list | None = None,
     ) -> str:
-        """Build a compact prompt for the orchestrator (doc stats, not full content)."""
+        """Build a compact prompt for the orchestrator with pre-computed section plan."""
         # Orchestrator gets a summary, not the full document (that's what tools are for)
         table_summaries = []
         for i, table in enumerate(document.tables[:20]):
@@ -149,15 +170,52 @@ class AIExtractor:
         markdown = document.metadata.get("markdown")
         format_info = "Docling markdown" if markdown else "PDF/HTML text + tables"
 
-        return (
-            f"Extract all fee data from this {exchange_code} options exchange fee schedule.\n\n"
-            f"Document format: {format_info}\n"
-            f"Text length: {len(document.full_text)} chars\n"
-            f"Tables: {len(document.tables)}\n"
-            f"{tables_text}\n\n"
-            f"Text preview (first 2000 chars):\n{text_preview}\n\n"
-            f"Use get_document_sections to plan the extraction, then extract_section for each group."
-        )
+        prompt_parts = [
+            f"Extract all fee data from this {exchange_code} options exchange fee schedule.\n",
+            f"Document format: {format_info}",
+            f"Text length: {len(document.full_text)} chars",
+            f"Tables: {len(document.tables)}",
+            tables_text,
+            f"\nText preview (first 2000 chars):\n{text_preview}\n",
+        ]
+
+        # Include pre-computed section plan so orchestrator knows exactly what to extract
+        if sections and section_groups:
+            prompt_parts.append("== PRE-COMPUTED SECTION PLAN ==")
+            prompt_parts.append(f"Total sections: {len(sections)}")
+
+            for i, s in enumerate(sections):
+                label = "(context)" if s.is_context else "(fee-bearing)"
+                prompt_parts.append(
+                    f"  Section {i}: {s.heading[:80]} — {s.char_count} chars, "
+                    f"{len(s.tables)} tables {label}"
+                )
+
+            prompt_parts.append(f"\nExtraction groups ({len(section_groups)}):")
+            for gi, group in enumerate(section_groups):
+                # Map group section indices back to global section indices
+                global_indices = []
+                for gs in group.sections:
+                    for si, s in enumerate(sections):
+                        if s is gs:
+                            global_indices.append(si)
+                            break
+                headings = [s.heading[:40] for s in group.sections]
+                prompt_parts.append(
+                    f"  Group {gi}: sections {global_indices} — {group.total_chars} chars — {headings}"
+                )
+
+            prompt_parts.append(
+                "\nYou MUST call extract_section once for EACH group above. "
+                "Do NOT combine groups or skip any. "
+                "After all groups are extracted, call validate_extraction on the merged result."
+            )
+        else:
+            prompt_parts.append(
+                "Use get_document_sections to plan the extraction, then extract_section for each group."
+            )
+
+        return "\n".join(prompt_parts)
 
     def _compute_confidence_heuristic(self, output) -> float:
         """Fallback heuristic confidence if validator didn't run."""

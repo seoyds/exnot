@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from exnot.ai.cost import CostTracker
 from exnot.ai.models import ModelRegistry
 from exnot.parser.base import ExtractedDocument
+
+if TYPE_CHECKING:
+    from exnot.parser.section_splitter import DocumentSection, SectionGroup
 
 
 @dataclass
@@ -18,6 +22,9 @@ class ExtractionDeps:
     exchange_code: str
     exchange_hints: str = ""
     document: ExtractedDocument = field(default_factory=lambda: ExtractedDocument(full_text="", tables=[]))
+    # Pre-computed sections and groups (set by AIExtractor before orchestrator runs)
+    sections: list[DocumentSection] = field(default_factory=list)
+    section_groups: list[SectionGroup] = field(default_factory=list)
 
 
 @dataclass
