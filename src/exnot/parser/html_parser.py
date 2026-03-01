@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 class HtmlParser(AbstractParser):
     """Extract text and tables from HTML fee schedule pages."""
 
-    def extract(self, content: bytes) -> ExtractedDocument:
+    def extract(self, content: bytes, rendered_text: str | None = None) -> ExtractedDocument:
         html_str = content.decode("utf-8", errors="replace")
         soup = BeautifulSoup(html_str, "lxml")
 
@@ -19,7 +19,12 @@ class HtmlParser(AbstractParser):
         for tag in soup(["script", "style", "nav", "footer", "header"]):
             tag.decompose()
 
-        full_text = soup.get_text(separator="\n", strip=True)
+        # Use Playwright-rendered visible text if provided, else fallback to get_text()
+        if rendered_text is not None:
+            full_text = rendered_text
+        else:
+            full_text = soup.get_text(separator="\n", strip=True)
+
         tables = self._extract_tables(soup)
 
         return ExtractedDocument(

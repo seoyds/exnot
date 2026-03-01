@@ -34,8 +34,8 @@ from exnot.normalizer.schema import NormalizedFeeSchedule
 from exnot.parser.ai_extractor import AIExtractor
 from exnot.parser.base import ExtractedDocument
 from exnot.parser.csv_parser import CsvParser
-from exnot.parser.html_parser import HtmlParser
 from exnot.parser.factory import get_pdf_parser
+from exnot.parser.html_parser import HtmlParser
 from exnot.scraper.base import CollectionResult, DocumentResult
 from exnot.scraper.document import DocumentCollector
 from exnot.storage.minio_client import DocumentStorage
@@ -394,14 +394,41 @@ def _parse_document(exchange: Exchange, doc_result: DocumentResult) -> Extracted
     if doc_result.is_csv or exchange.fee_schedule_format == FeeScheduleFormat.CSV:
         logger.info(f"[{exchange.code}] Parsing as CSV")
         parser = CsvParser()
+        return parser.extract(doc_result.content_bytes)
     elif doc_result.is_pdf or exchange.fee_schedule_format == FeeScheduleFormat.PDF:
         logger.info(f"[{exchange.code}] Parsing as PDF")
         parser = get_pdf_parser()
+        return parser.extract(doc_result.content_bytes)
     else:
         logger.info(f"[{exchange.code}] Parsing as HTML")
         parser = HtmlParser()
+        rendered_text = _render_html_visible_text(exchange.code, doc_result.content_bytes)
+        return parser.extract(doc_result.content_bytes, rendered_text=rendered_text)
 
-    return parser.extract(doc_result.content_bytes)
+
+def _render_html_visible_text(exchange_code: str, html_bytes: bytes) -> str | None:
+    """Render HTML with Playwright to extract only visible text.
+
+    Returns the rendered text, or None to fall back to BeautifulSoup get_text().
+    """
+    from exnot.parser.html_renderer import render_html_text
+
+    try:
+        rendered = render_html_text(html_bytes)
+        if rendered:
+            raw_len = len(html_bytes)
+            rendered_len = len(rendered)
+            logger.info(
+                f"[{exchange_code}] Playwright rendered HTML: "
+                f"{raw_len} bytes -> {rendered_len} chars visible text"
+            )
+            return rendered
+        else:
+            logger.warning(f"[{exchange_code}] Playwright returned empty text, falling back to get_text()")
+            return None
+    except Exception as e:
+        logger.warning(f"[{exchange_code}] Playwright rendering failed: {e}, falling back to get_text()")
+        return None
 
 
 def _parse_supplementary_html(
@@ -414,7 +441,8 @@ def _parse_supplementary_html(
         if doc.content_type == ContentType.HTML and doc.content_hash != collection.primary.content_hash:
             logger.info(f"[{exchange.code}] Parsing supplementary HTML from {doc.source_url}")
             parser = HtmlParser()
-            return parser.extract(doc.content_bytes)
+            rendered_text = _render_html_visible_text(exchange.code, doc.content_bytes)
+            return parser.extract(doc.content_bytes, rendered_text=rendered_text)
 
     logger.info(f"[{exchange.code}] No supplementary HTML document found in collection")
     return None
