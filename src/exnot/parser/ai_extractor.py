@@ -58,8 +58,9 @@ class AIExtractor:
     async def _extract_async(
         self, document: ExtractedDocument, exchange_code: str
     ) -> ExtractionResult:
-        """Async extraction using the orchestrator agent."""
-        from exnot.ai.agents.orchestrator import orchestrator_agent
+        """Async extraction: direct group iteration + validation/correction agents."""
+        from exnot.ai.agents.section_extractor import section_extractor_agent
+        from exnot.ai.agents.table_classifier import classify_tables_hybrid
         from exnot.ai.cost import CostTracker
         from exnot.ai.deps import ExtractionDeps
         from exnot.ai.models import ModelRegistry, TaskType
@@ -69,6 +70,8 @@ class AIExtractor:
             group_sections,
             split_document,
         )
+        from exnot.parser.table_classifier import classify_tables as rule_classify_tables
+        from pydantic_ai.settings import ModelSettings
 
         settings = get_settings()
         registry = ModelRegistry(settings)
@@ -80,7 +83,7 @@ class AIExtractor:
         hints = get_hints_for_exchange(exchange_code)
         exchange_hints = hints.get("prompt_addition", "")
 
-        # Pre-split document into sections and groups BEFORE the orchestrator runs
+        # Pre-split document into sections and groups
         format_hint = document.metadata.get("parser", "pdf")
         sections = split_document(document, format_hint=format_hint)
         sections = classify_context_sections(sections)
@@ -103,56 +106,157 @@ class AIExtractor:
             section_groups=section_groups,
         )
 
-        # Build orchestrator prompt with pre-computed section plan
-        prompt = self._build_orchestrator_prompt(document, exchange_code, sections, section_groups)
+        logger.info(f"[{exchange_code}] Starting direct extraction pipeline")
 
-        model = registry.get_model(TaskType.ORCHESTRATOR)
-        logger.info(f"[{exchange_code}] Starting agentic extraction pipeline")
+        # Build context text from definitions/footnotes sections
+        context_sections = [s for s in sections if s.is_context]
+        context_text = self._build_context_text(context_sections)
 
-        from pydantic_ai.settings import ModelSettings
+        # Extract from each group directly (no orchestrator needed)
+        MAX_TABLE_ROWS = 50
+        extraction_model = registry.get_model(TaskType.FEE_EXTRACTION)
+        extraction_model_name = registry.get_model_name(TaskType.FEE_EXTRACTION)
 
-        agent_result = await orchestrator_agent.run(
-            prompt,
-            deps=deps,
-            model=model,
-            model_settings=ModelSettings(max_tokens=16384),
-        )
+        for gi, group in enumerate(section_groups):
+            if cost_tracker.is_over_budget:
+                logger.warning(f"[{exchange_code}] Over budget at group {gi}, stopping extraction")
+                break
 
-        # Track orchestrator cost
-        model_name = registry.get_model_name(TaskType.ORCHESTRATOR)
-        cost_tracker.record(
-            task="orchestrator",
-            model=model_name,
-            usage=agent_result.usage(),
-        )
+            headings = [s.heading[:40] for s in group.sections]
+            section_info = f"Group {gi}: {', '.join(headings)}"
 
-        typed_output = agent_result.output
+            # Build section content
+            section_text_parts: list[str] = []
+            section_tables_parts: list[str] = []
 
-        # Fees are accumulated in deps.extracted_fees (not in orchestrator output)
-        raw_fees = deps.extracted_fees if deps.extracted_fees else [
-            fee.model_dump() for fee in typed_output.fees
-        ]
+            for section in group.sections:
+                section_text_parts.append(f"--- {section.heading} ---")
+                section_text_parts.append(section.text)
 
-        # Convert typed output -> legacy ExtractionResult
+                if section.tables:
+                    classifications = rule_classify_tables(section.tables)
+                    for j, table in enumerate(section.tables):
+                        is_fee = classifications[j].is_fee_table if j < len(classifications) else True
+                        if not is_fee:
+                            continue
+                        section_tables_parts.append(f"\n--- Table: {table.title} ---")
+                        section_tables_parts.append(f"Headers: {table.headers}")
+                        for row in table.rows[:MAX_TABLE_ROWS]:
+                            section_tables_parts.append(f"  {row}")
+                        if len(table.rows) > MAX_TABLE_ROWS:
+                            section_tables_parts.append(f"  ... ({len(table.rows)} rows total)")
+                        if table.footnotes:
+                            section_tables_parts.append(f"Footnotes: {table.footnotes}")
+
+            prompt_parts = [f"Extract fees from: {section_info}"]
+            prompt_parts.append(f"\nSECTION DATA:\n{''.join(section_text_parts)}")
+            if section_tables_parts:
+                prompt_parts.append(f"\nSECTION TABLES:\n{''.join(section_tables_parts)}")
+            if context_text:
+                prompt_parts.append(f"\nREFERENCE CONTEXT (definitions, footnotes, glossary):\n{context_text}")
+            if exchange_hints:
+                prompt_parts.append(f"\n{exchange_hints}")
+
+            prompt = "\n".join(prompt_parts)
+
+            result = await section_extractor_agent.run(
+                prompt,
+                deps=deps,
+                model=extraction_model,
+                model_settings=ModelSettings(max_tokens=16384),
+            )
+
+            cost_tracker.record(
+                task=f"extract_section:{section_info[:50]}",
+                model=extraction_model_name,
+                usage=result.usage(),
+            )
+
+            output = result.output
+            fee_dicts = [f.model_dump() for f in output.fees]
+            deps.extracted_fees.extend(fee_dicts)
+
+            logger.info(
+                f"[{exchange_code}] Group {gi}/{len(section_groups)-1}: "
+                f"{len(output.fees)} fees (total {len(deps.extracted_fees)})"
+            )
+
+        # Run validation if we have fees and budget remaining
+        raw_fees = deps.extracted_fees
+        confidence = self._compute_confidence_from_fees(raw_fees)
+
+        if raw_fees and not cost_tracker.is_over_budget:
+            confidence = await self._run_validation(deps, cost_tracker, registry)
+
+        # Build result
         result = ExtractionResult(
             raw_fees=raw_fees,
-            confidence=typed_output.validation_confidence or self._compute_confidence_from_fees(raw_fees),
-            exchange_name=typed_output.exchange_name,
-            effective_date=typed_output.effective_date,
-            extraction_notes=typed_output.extraction_notes,
+            confidence=confidence,
+            exchange_name=exchange_code,
+            extraction_notes=f"Extracted from {len(section_groups)} groups",
             ai_calls_made=len(cost_tracker.calls),
             total_tokens_used=cost_tracker.total_tokens,
             structural_analysis=cost_tracker.summary(),
         )
 
         logger.info(
-            f"[{exchange_code}] Agentic extraction complete. "
+            f"[{exchange_code}] Extraction complete. "
             f"{len(result.raw_fees)} fees, confidence={result.confidence:.2f}, "
             f"AI calls={result.ai_calls_made}, tokens={result.total_tokens_used}, "
             f"cost=${cost_tracker.total_cost_usd:.4f}"
         )
 
         return result
+
+    def _build_context_text(self, context_sections: list) -> str:
+        """Build reference context from definitions/footnotes sections."""
+        parts: list[str] = []
+        for s in context_sections:
+            parts.append(f"--- {s.heading} ---")
+            parts.append(s.text[:3000])
+            for table in s.tables[:3]:
+                parts.append(f"Table: {table.title}")
+                parts.append(f"Headers: {table.headers}")
+                for row in table.rows[:20]:
+                    parts.append(f"  {row}")
+        return "\n".join(parts)[:8000]
+
+    async def _run_validation(
+        self, deps, cost_tracker, registry,
+    ) -> float:
+        """Run fee validation agent and return confidence score."""
+        import json
+
+        from exnot.ai.agents.fee_validator import fee_validator_agent
+        from exnot.ai.models import TaskType
+        from pydantic_ai.settings import ModelSettings
+
+        fees_json = json.dumps(deps.extracted_fees)
+        prompt = (
+            f"Validate these extracted fees for {deps.exchange_code}.\n\n"
+            f"Extracted fees ({len(deps.extracted_fees)} entries):\n{fees_json}\n"
+        )
+
+        model = deps.model_registry.get_model(TaskType.FEE_VALIDATION)
+        try:
+            result = await fee_validator_agent.run(
+                prompt,
+                deps=deps,
+                model=model,
+                model_settings=ModelSettings(max_tokens=8192),
+            )
+
+            model_name = deps.model_registry.get_model_name(TaskType.FEE_VALIDATION)
+            cost_tracker.record(
+                task="validate_extraction",
+                model=model_name,
+                usage=result.usage(),
+            )
+
+            return result.output.confidence
+        except Exception as e:
+            logger.warning(f"[{deps.exchange_code}] Validation failed: {e}")
+            return self._compute_confidence_from_fees(deps.extracted_fees)
 
     def _build_orchestrator_prompt(
         self, document: ExtractedDocument, exchange_code: str,
