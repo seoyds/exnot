@@ -99,9 +99,7 @@ class SnapshotRepository:
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def get_history(
-        self, exchange_id: uuid.UUID, limit: int = 50
-    ) -> list[FeeScheduleSnapshot]:
+    async def get_history(self, exchange_id: uuid.UUID, limit: int = 50) -> list[FeeScheduleSnapshot]:
         stmt = (
             select(FeeScheduleSnapshot)
             .where(FeeScheduleSnapshot.exchange_id == exchange_id)
@@ -180,9 +178,7 @@ class FeeChangeRepository:
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
-    async def get_for_exchange(
-        self, exchange_id: uuid.UUID, limit: int = 50
-    ) -> list[FeeChange]:
+    async def get_for_exchange(self, exchange_id: uuid.UUID, limit: int = 50) -> list[FeeChange]:
         stmt = (
             select(FeeChange)
             .where(FeeChange.exchange_id == exchange_id)
@@ -293,11 +289,7 @@ class ExchangeProfileRepository:
         return result.scalar_one_or_none()
 
     async def get_by_exchange_code(self, code: str) -> ExchangeProfile | None:
-        stmt = (
-            select(ExchangeProfile)
-            .join(Exchange)
-            .where(Exchange.code == code)
-        )
+        stmt = select(ExchangeProfile).join(Exchange).where(Exchange.code == code)
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -337,10 +329,7 @@ class AgentRunRepository:
 
     async def get_recent(self, limit: int = 50) -> list[AgentRun]:
         stmt = (
-            select(AgentRun)
-            .options(selectinload(AgentRun.exchange))
-            .order_by(AgentRun.started_at.desc())
-            .limit(limit)
+            select(AgentRun).options(selectinload(AgentRun.exchange)).order_by(AgentRun.started_at.desc()).limit(limit)
         )
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
@@ -356,10 +345,6 @@ class AgentEventRepository:
         return event
 
     async def get_for_run(self, run_id: uuid.UUID) -> list[AgentEvent]:
-        stmt = (
-            select(AgentEvent)
-            .where(AgentEvent.run_id == run_id)
-            .order_by(AgentEvent.seq)
-        )
+        stmt = select(AgentEvent).where(AgentEvent.run_id == run_id).order_by(AgentEvent.seq)
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
