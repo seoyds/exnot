@@ -68,9 +68,14 @@
                                     Subscribe
                                 </a>
                                 {% if user and user.is_admin %}
+                                <a href="/dashboard/monitor"
+                                   class="rounded-md px-3 py-2 text-sm font-medium transition-colors
+                                          {% if '/monitor' in request.url.path %}bg-slate-800 text-white{% else %}text-slate-300 hover:bg-slate-700 hover:text-white{% endif %}">
+                                    Monitor
+                                </a>
                                 <a href="/dashboard/admin"
                                    class="rounded-md px-3 py-2 text-sm font-medium transition-colors
-                                          {% if '/admin' in request.url.path %}bg-slate-800 text-white{% else %}text-slate-300 hover:bg-slate-700 hover:text-white{% endif %}">
+                                          {% if '/admin' in request.url.path and '/monitor' not in request.url.path %}bg-slate-800 text-white{% else %}text-slate-300 hover:bg-slate-700 hover:text-white{% endif %}">
                                     Admin
                                 </a>
                                 {% endif %}
