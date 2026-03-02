@@ -10,6 +10,7 @@ from exnot.ai.models import ModelRegistry
 from exnot.parser.base import ExtractedDocument
 
 if TYPE_CHECKING:
+    from exnot.ai.event_emitter import EventEmitter
     from exnot.parser.section_splitter import DocumentSection, SectionGroup
 
 
@@ -29,6 +30,8 @@ class ExtractionDeps:
     extracted_fees: list[dict] = field(default_factory=list)
     # Cache for table classifications (avoid repeated AI calls on orchestrator retry)
     table_classifications: list[dict] | None = None
+    # Optional event emitter for monitoring pipeline progress
+    event_emitter: EventEmitter | None = None
 
 
 @dataclass

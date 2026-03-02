@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from exnot.db.models import (
+    AgentEventType,
     ChangeType,
     DiscoveryStatus,
     Exchange,
@@ -43,21 +44,24 @@ from exnot.storage.minio_client import DocumentStorage
 logger = logging.getLogger(__name__)
 
 
-def run_scrape_pipeline(exchange_code: str, session: Session) -> ChangeReport | None:
+def run_scrape_pipeline(
+    exchange_code: str,
+    session: Session,
+    celery_task_id: str | None = None,
+) -> ChangeReport | None:
     """Execute the full scrape-parse-normalize-diff pipeline for a single exchange.
 
     Args:
         exchange_code: The exchange code to process (e.g., "CBOE", "ARCA").
         session: A synchronous SQLAlchemy session.
+        celery_task_id: Optional Celery task ID for event monitoring/cancellation.
 
     Returns:
         A ChangeReport if changes were detected, or None if the document was
         unchanged or an error occurred.
     """
     # --- Step (a): Load exchange from DB ---
-    exchange = session.execute(
-        select(Exchange).where(Exchange.code == exchange_code)
-    ).scalar_one_or_none()
+    exchange = session.execute(select(Exchange).where(Exchange.code == exchange_code)).scalar_one_or_none()
 
     if exchange is None:
         logger.error(f"[{exchange_code}] Exchange not found in database")
@@ -67,166 +71,274 @@ def run_scrape_pipeline(exchange_code: str, session: Session) -> ChangeReport | 
         logger.info(f"[{exchange_code}] Exchange is inactive, skipping")
         return None
 
-    # --- Step (a2): Run URL discovery if needed ---
-    if exchange.discovery_status != DiscoveryStatus.DISCOVERED:
-        logger.info(f"[{exchange_code}] URLs not yet discovered, running discovery first...")
-        from exnot.discovery.pipeline import run_discovery_pipeline
+    # Create event emitter for monitoring
+    emitter = None
+    try:
+        from exnot.ai.event_emitter import EventEmitter
 
-        success = run_discovery_pipeline(exchange_code, session)
-        session.flush()
-        if not success:
-            logger.error(f"[{exchange_code}] Discovery failed, cannot proceed with scrape")
-            _record_scrape_log(exchange, session, ScrapeStatus.FAILED, error_message="URL discovery failed")
+        emitter = EventEmitter(exchange_id=exchange.id, celery_task_id=celery_task_id)
+        emitter.emit(AgentEventType.PIPELINE_START, "pipeline_start")
+    except Exception:
+        logger.warning(f"[{exchange_code}] Failed to create EventEmitter, proceeding without monitoring")
+
+    try:
+        # --- Step (a2): Run URL discovery if needed ---
+        if exchange.discovery_status != DiscoveryStatus.DISCOVERED:
+            logger.info(f"[{exchange_code}] URLs not yet discovered, running discovery first...")
+            from exnot.discovery.pipeline import run_discovery_pipeline
+
+            success = run_discovery_pipeline(exchange_code, session)
+            session.flush()
+            if not success:
+                logger.error(f"[{exchange_code}] Discovery failed, cannot proceed with scrape")
+                _record_scrape_log(exchange, session, ScrapeStatus.FAILED, error_message="URL discovery failed")
+                return None
+            session.refresh(exchange)
+
+        if emitter:
+            try:
+                emitter.emit(AgentEventType.PIPELINE_STEP, "discovery_complete")
+            except Exception:
+                pass
+
+        # --- Step (b): Collect documents (async scraper, bridged via asyncio.run) ---
+        logger.info(f"[{exchange_code}] Starting document collection from {exchange.fee_schedule_url}")
+        collection = _collect_documents(exchange)
+
+        if emitter:
+            try:
+                emitter.emit(AgentEventType.PIPELINE_STEP, "document_collection")
+            except Exception:
+                pass
+
+        # --- Step (c): Compare hash with latest snapshot (uses primary doc hash) ---
+        latest_snapshot = _get_latest_snapshot(exchange, session)
+        latest_hash = latest_snapshot.source_hash if latest_snapshot else None
+
+        if latest_hash == collection.primary_hash:
+            logger.info(f"[{exchange_code}] Document unchanged (hash: {collection.primary_hash[:12]}...)")
+            _record_scrape_log(exchange, session, ScrapeStatus.NO_CHANGE, collection.primary_hash)
+            if emitter:
+                try:
+                    emitter.emit(AgentEventType.PIPELINE_STEP, "no_change")
+                    emitter.complete()
+                except Exception:
+                    pass
             return None
-        session.refresh(exchange)
 
-    # --- Step (b): Collect documents (async scraper, bridged via asyncio.run) ---
-    logger.info(f"[{exchange_code}] Starting document collection from {exchange.fee_schedule_url}")
-    collection = _collect_documents(exchange)
-
-    # --- Step (c): Compare hash with latest snapshot (uses primary doc hash) ---
-    latest_snapshot = _get_latest_snapshot(exchange, session)
-    latest_hash = latest_snapshot.source_hash if latest_snapshot else None
-
-    if latest_hash == collection.primary_hash:
-        logger.info(f"[{exchange_code}] Document unchanged (hash: {collection.primary_hash[:12]}...)")
-        _record_scrape_log(exchange, session, ScrapeStatus.NO_CHANGE, collection.primary_hash)
-        return None
-
-    logger.info(
-        f"[{exchange_code}] Document changed! "
-        f"Old hash: {latest_hash[:12] + '...' if latest_hash else 'N/A'}, "
-        f"New hash: {collection.primary_hash[:12]}..."
-    )
-
-    # --- Step (d): Create new FeeScheduleSnapshot ---
-    new_version = (latest_snapshot.version + 1) if latest_snapshot else 1
-    snapshot = FeeScheduleSnapshot(
-        exchange_id=exchange.id,
-        version=new_version,
-        source_url=collection.primary.source_url,
-        source_hash=collection.primary_hash,
-        raw_document=None,  # Documents now stored in MinIO
-        status=SnapshotStatus.PENDING,
-    )
-    session.add(snapshot)
-    session.flush()
-    logger.info(f"[{exchange_code}] Created snapshot v{new_version} (id: {snapshot.id})")
-
-    # --- Step (d2): Store all documents in MinIO + create ScrapedDocument records ---
-    _store_documents(exchange, snapshot, collection, session)
-
-    # --- Step (e): Parse primary document + supplementary docs for full context ---
-    extracted = _parse_document(exchange, collection.primary)
-
-    # When primary is CSV, also parse the HTML version for tier details and footnotes
-    if collection.primary.is_csv:
-        supplementary = _parse_supplementary_html(exchange, collection)
-        if supplementary:
-            extracted = _merge_extracted_documents(extracted, supplementary)
-            logger.info(f"[{exchange_code}] Merged HTML supplement ({len(supplementary.tables)} tables, "
-                        f"{len(supplementary.full_text)} chars) with CSV primary")
-
-    snapshot.raw_text = extracted.full_text
-    snapshot.status = SnapshotStatus.PARSED
-    session.flush()
-
-    # --- Step (f): Try profile-based extraction, fall back to AI ---
-    profile_fees = _try_profile_extraction(exchange, extracted, session)
-
-    if profile_fees is not None:
-        # Rules-based extraction succeeded — skip AI
-        logger.info(f"[{exchange_code}] Using profile-based extraction ({len(profile_fees)} fees)")
-        snapshot.ai_extraction = {
-            "extraction_mode": "PROFILE",
-            "raw_fees_count": len(profile_fees),
-            "ai_calls_made": 0,
-        }
-        snapshot.parsing_confidence = 1.0
-        session.flush()
-
-        from exnot.normalizer.engine import NormalizationEngine
-        from exnot.parser.ai_extractor import ExtractionResult
-
-        # Wrap profile fees in ExtractionResult for normalizer compatibility
-        extraction_result = ExtractionResult(
-            raw_fees=profile_fees,
-            confidence=1.0,
-            exchange_name=exchange.name,
-            extraction_notes="Profile-based extraction (zero AI)",
+        logger.info(
+            f"[{exchange_code}] Document changed! "
+            f"Old hash: {latest_hash[:12] + '...' if latest_hash else 'N/A'}, "
+            f"New hash: {collection.primary_hash[:12]}..."
         )
-        normalizer = NormalizationEngine()
-        normalized_schedule = normalizer.normalize(extraction_result, exchange_code)
-    else:
-        # AI extraction (existing path)
-        ai_extractor = AIExtractor()
-        extraction_result = ai_extractor.extract(extracted, exchange_code)
-        snapshot.ai_extraction = {
-            "structural_analysis": extraction_result.structural_analysis,
-            "raw_fees_count": len(extraction_result.raw_fees),
-            "confidence": extraction_result.confidence,
-            "exchange_name": extraction_result.exchange_name,
-            "effective_date": extraction_result.effective_date,
-            "extraction_notes": extraction_result.extraction_notes,
-            "ai_calls_made": extraction_result.ai_calls_made,
-        }
-        snapshot.parsing_confidence = extraction_result.confidence
+
+        # --- Step (d): Create new FeeScheduleSnapshot ---
+        new_version = (latest_snapshot.version + 1) if latest_snapshot else 1
+        snapshot = FeeScheduleSnapshot(
+            exchange_id=exchange.id,
+            version=new_version,
+            source_url=collection.primary.source_url,
+            source_hash=collection.primary_hash,
+            raw_document=None,  # Documents now stored in MinIO
+            status=SnapshotStatus.PENDING,
+        )
+        session.add(snapshot)
+        session.flush()
+        logger.info(f"[{exchange_code}] Created snapshot v{new_version} (id: {snapshot.id})")
+
+        if emitter:
+            try:
+                emitter.emit(AgentEventType.PIPELINE_STEP, "snapshot_created")
+            except Exception:
+                pass
+
+        # --- Step (d2): Store all documents in MinIO + create ScrapedDocument records ---
+        _store_documents(exchange, snapshot, collection, session)
+
+        # --- Step (e): Parse primary document + supplementary docs for full context ---
+        extracted = _parse_document(exchange, collection.primary)
+
+        # When primary is CSV, also parse the HTML version for tier details and footnotes
+        if collection.primary.is_csv:
+            supplementary = _parse_supplementary_html(exchange, collection)
+            if supplementary:
+                extracted = _merge_extracted_documents(extracted, supplementary)
+                logger.info(
+                    f"[{exchange_code}] Merged HTML supplement ({len(supplementary.tables)} tables, "
+                    f"{len(supplementary.full_text)} chars) with CSV primary"
+                )
+
+        snapshot.raw_text = extracted.full_text
+        snapshot.status = SnapshotStatus.PARSED
         session.flush()
 
-        from exnot.normalizer.engine import NormalizationEngine
+        if emitter:
+            try:
+                emitter.emit(AgentEventType.PIPELINE_STEP, "document_parsed")
+            except Exception:
+                pass
 
-        normalizer = NormalizationEngine()
-        normalized_schedule = normalizer.normalize(extraction_result, exchange_code)
+        # --- Step (f): Try profile-based extraction, fall back to AI ---
+        profile_fees = _try_profile_extraction(exchange, extracted, session)
 
-        # Build/update profile from AI results
-        _build_and_save_profile(exchange, extracted, extraction_result.raw_fees, session)
+        if profile_fees is not None:
+            # Rules-based extraction succeeded — skip AI
+            logger.info(f"[{exchange_code}] Using profile-based extraction ({len(profile_fees)} fees)")
+            snapshot.ai_extraction = {
+                "extraction_mode": "PROFILE",
+                "raw_fees_count": len(profile_fees),
+                "ai_calls_made": 0,
+            }
+            snapshot.parsing_confidence = 1.0
+            session.flush()
 
-    # Set effective date on snapshot if found
-    if normalized_schedule.effective_date:
-        snapshot.effective_date = normalized_schedule.effective_date
+            if emitter:
+                try:
+                    emitter.emit(
+                        AgentEventType.PIPELINE_STEP,
+                        "extraction_complete",
+                        metadata={"fee_count": len(profile_fees), "mode": "profile"},
+                    )
+                except Exception:
+                    pass
 
-    snapshot.normalized_fees_json = json.loads(normalized_schedule.model_dump_json())
-    snapshot.status = SnapshotStatus.NORMALIZED
-    session.flush()
+            from exnot.normalizer.engine import NormalizationEngine
+            from exnot.parser.ai_extractor import ExtractionResult
 
-    # --- Step (h): Save NormalizedFee records ---
-    _save_normalized_fees(exchange, snapshot, normalized_schedule, session)
+            # Wrap profile fees in ExtractionResult for normalizer compatibility
+            extraction_result = ExtractionResult(
+                raw_fees=profile_fees,
+                confidence=1.0,
+                exchange_name=exchange.name,
+                extraction_notes="Profile-based extraction (zero AI)",
+            )
+            normalizer = NormalizationEngine()
+            normalized_schedule = normalizer.normalize(extraction_result, exchange_code)
+        else:
+            # AI extraction (existing path)
+            if emitter:
+                try:
+                    emitter.emit(AgentEventType.PIPELINE_STEP, "extraction_start")
+                except Exception:
+                    pass
 
-    # --- Step (i): Run change detection against previous snapshot ---
-    old_schedule = None
-    old_version = None
-    if latest_snapshot:
-        old_schedule = _reconstruct_schedule(latest_snapshot, exchange_code)
-        old_version = latest_snapshot.version
+            ai_extractor = AIExtractor()
+            extraction_result = ai_extractor.extract(extracted, exchange_code, event_emitter=emitter)
+            snapshot.ai_extraction = {
+                "structural_analysis": extraction_result.structural_analysis,
+                "raw_fees_count": len(extraction_result.raw_fees),
+                "confidence": extraction_result.confidence,
+                "exchange_name": extraction_result.exchange_name,
+                "effective_date": extraction_result.effective_date,
+                "extraction_notes": extraction_result.extraction_notes,
+                "ai_calls_made": extraction_result.ai_calls_made,
+            }
+            snapshot.parsing_confidence = extraction_result.confidence
+            session.flush()
 
-    detector = ChangeDetector()
-    change_report = detector.detect(
-        old_schedule=old_schedule,
-        new_schedule=normalized_schedule,
-        old_version=old_version,
-        new_version=new_version,
-    )
+            if emitter:
+                try:
+                    emitter.emit(
+                        AgentEventType.PIPELINE_STEP,
+                        "extraction_complete",
+                        metadata={"fee_count": len(extraction_result.raw_fees), "mode": "ai"},
+                    )
+                except Exception:
+                    pass
 
-    # --- Step (j): Save FeeChange records ---
-    if change_report.has_changes:
-        _save_fee_changes(exchange, latest_snapshot, snapshot, change_report, session)
+            from exnot.normalizer.engine import NormalizationEngine
 
-    snapshot.status = SnapshotStatus.VERIFIED
-    session.flush()
+            normalizer = NormalizationEngine()
+            normalized_schedule = normalizer.normalize(extraction_result, exchange_code)
 
-    # Record scrape log
-    _record_scrape_log(
-        exchange, session, ScrapeStatus.SUCCESS, collection.primary_hash,
-        has_changes=change_report.has_changes,
-    )
+            # Build/update profile from AI results
+            _build_and_save_profile(exchange, extracted, extraction_result.raw_fees, session)
 
-    logger.info(
-        f"[{exchange_code}] Pipeline complete. "
-        f"{len(change_report.changes)} changes detected in v{new_version}."
-    )
+        # Set effective date on snapshot if found
+        if normalized_schedule.effective_date:
+            snapshot.effective_date = normalized_schedule.effective_date
 
-    # --- Step (k): Return the change report ---
-    return change_report
+        snapshot.normalized_fees_json = json.loads(normalized_schedule.model_dump_json())
+        snapshot.status = SnapshotStatus.NORMALIZED
+        session.flush()
+
+        # --- Step (h): Save NormalizedFee records ---
+        _save_normalized_fees(exchange, snapshot, normalized_schedule, session)
+
+        if emitter:
+            try:
+                emitter.emit(AgentEventType.PIPELINE_STEP, "normalization_complete")
+            except Exception:
+                pass
+
+        # --- Step (i): Run change detection against previous snapshot ---
+        old_schedule = None
+        old_version = None
+        if latest_snapshot:
+            old_schedule = _reconstruct_schedule(latest_snapshot, exchange_code)
+            old_version = latest_snapshot.version
+
+        detector = ChangeDetector()
+        change_report = detector.detect(
+            old_schedule=old_schedule,
+            new_schedule=normalized_schedule,
+            old_version=old_version,
+            new_version=new_version,
+        )
+
+        # --- Step (j): Save FeeChange records ---
+        if change_report.has_changes:
+            _save_fee_changes(exchange, latest_snapshot, snapshot, change_report, session)
+
+        snapshot.status = SnapshotStatus.VERIFIED
+        session.flush()
+
+        if emitter:
+            try:
+                emitter.emit(
+                    AgentEventType.PIPELINE_STEP,
+                    "diff_complete",
+                    metadata={"change_count": len(change_report.changes)},
+                )
+            except Exception:
+                pass
+
+        # Record scrape log
+        _record_scrape_log(
+            exchange,
+            session,
+            ScrapeStatus.SUCCESS,
+            collection.primary_hash,
+            has_changes=change_report.has_changes,
+        )
+
+        logger.info(
+            f"[{exchange_code}] Pipeline complete. {len(change_report.changes)} changes detected in v{new_version}."
+        )
+
+        # Mark pipeline complete with cost summary
+        if emitter:
+            try:
+                ai_data = snapshot.ai_extraction or {}
+                cost_summary = ai_data.get("structural_analysis", ai_data)
+                emitter.complete(
+                    total_cost_usd=cost_summary.get("total_cost_usd", 0.0),
+                    total_input_tokens=cost_summary.get("total_input_tokens", 0),
+                    total_output_tokens=cost_summary.get("total_output_tokens", 0),
+                )
+            except Exception:
+                pass
+
+        # --- Step (k): Return the change report ---
+        return change_report
+
+    except Exception as exc:
+        if emitter:
+            try:
+                emitter.fail(str(exc))
+            except Exception:
+                pass
+        raise
 
 
 def _try_profile_extraction(
@@ -257,8 +369,7 @@ def _try_profile_extraction(
         changed_pct = comparison.changed_ratio
         if changed_pct > 0.5:
             logger.info(
-                f"[{exchange.code}] Major table structure change ({changed_pct:.0%}), "
-                f"rebuilding profile with AI"
+                f"[{exchange.code}] Major table structure change ({changed_pct:.0%}), rebuilding profile with AI"
             )
         else:
             logger.info(
@@ -419,8 +530,7 @@ def _render_html_visible_text(exchange_code: str, html_bytes: bytes) -> str | No
             raw_len = len(html_bytes)
             rendered_len = len(rendered)
             logger.info(
-                f"[{exchange_code}] Playwright rendered HTML: "
-                f"{raw_len} bytes -> {rendered_len} chars visible text"
+                f"[{exchange_code}] Playwright rendered HTML: {raw_len} bytes -> {rendered_len} chars visible text"
             )
             return rendered
         else:
@@ -431,9 +541,7 @@ def _render_html_visible_text(exchange_code: str, html_bytes: bytes) -> str | No
         return None
 
 
-def _parse_supplementary_html(
-    exchange: Exchange, collection: CollectionResult
-) -> ExtractedDocument | None:
+def _parse_supplementary_html(exchange: Exchange, collection: CollectionResult) -> ExtractedDocument | None:
     """Find and parse an HTML document from the collection to supplement CSV data."""
     from exnot.scraper.base import ContentType
 
@@ -448,17 +556,13 @@ def _parse_supplementary_html(
     return None
 
 
-def _merge_extracted_documents(
-    primary: ExtractedDocument, supplementary: ExtractedDocument
-) -> ExtractedDocument:
+def _merge_extracted_documents(primary: ExtractedDocument, supplementary: ExtractedDocument) -> ExtractedDocument:
     """Merge a supplementary document into the primary, combining text and tables."""
     merged_text = (
-        primary.full_text
-        + "\n\n--- SUPPLEMENTARY HTML PAGE (use this for tier conditions, footnotes, "
+        primary.full_text + "\n\n--- SUPPLEMENTARY HTML PAGE (use this for tier conditions, footnotes, "
         "and contra-party details to ENRICH the fees above — do NOT create separate "
         "fee entries from this section alone; instead attach tier_group, tier_number, "
-        "tier_conditions, contra_party_type, and conditions to the matching CSV fees) ---\n\n"
-        + supplementary.full_text
+        "tier_conditions, contra_party_type, and conditions to the matching CSV fees) ---\n\n" + supplementary.full_text
     )
     merged_tables = primary.tables + supplementary.tables
     merged_metadata = {**primary.metadata, "supplementary_tables": len(supplementary.tables)}
@@ -575,9 +679,7 @@ def _save_normalized_fees(
     return db_fees
 
 
-def _reconstruct_schedule(
-    snapshot: FeeScheduleSnapshot, exchange_code: str
-) -> NormalizedFeeSchedule | None:
+def _reconstruct_schedule(snapshot: FeeScheduleSnapshot, exchange_code: str) -> NormalizedFeeSchedule | None:
     """Reconstruct a NormalizedFeeSchedule from a stored snapshot's JSON."""
     if snapshot.normalized_fees_json is None:
         return None
@@ -586,8 +688,7 @@ def _reconstruct_schedule(
         return NormalizedFeeSchedule.model_validate(snapshot.normalized_fees_json)
     except Exception:
         logger.warning(
-            f"[{exchange_code}] Failed to reconstruct schedule from snapshot "
-            f"v{snapshot.version}, falling back to None"
+            f"[{exchange_code}] Failed to reconstruct schedule from snapshot v{snapshot.version}, falling back to None"
         )
         return None
 

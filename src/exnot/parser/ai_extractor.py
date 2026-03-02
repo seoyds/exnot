@@ -6,9 +6,11 @@ while delegating to the agentic orchestrator pipeline in `exnot.ai.agents`.
 
 import asyncio
 import logging
+import time
 from dataclasses import dataclass, field
 
 from exnot.config import get_settings
+from exnot.db.models import AgentEventType
 from exnot.parser.base import ExtractedDocument
 
 logger = logging.getLogger(__name__)
@@ -37,7 +39,12 @@ class AIExtractor:
         self.max_retries = settings.ai_max_retries
         self.budget_per_exchange = settings.ai_budget_per_exchange_usd
 
-    def extract(self, document: ExtractedDocument, exchange_code: str) -> ExtractionResult:
+    def extract(
+        self,
+        document: ExtractedDocument,
+        exchange_code: str,
+        event_emitter=None,
+    ) -> ExtractionResult:
         """Run the extraction pipeline. Same interface as before."""
         try:
             loop = asyncio.get_running_loop()
@@ -50,17 +57,22 @@ class AIExtractor:
 
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
                 return pool.submit(
-                    asyncio.run, self._extract_async(document, exchange_code)
+                    asyncio.run,
+                    self._extract_async(document, exchange_code, event_emitter=event_emitter),
                 ).result()
         else:
-            return asyncio.run(self._extract_async(document, exchange_code))
+            return asyncio.run(self._extract_async(document, exchange_code, event_emitter=event_emitter))
 
     async def _extract_async(
-        self, document: ExtractedDocument, exchange_code: str
+        self,
+        document: ExtractedDocument,
+        exchange_code: str,
+        event_emitter=None,
     ) -> ExtractionResult:
         """Async extraction: direct group iteration + validation/correction agents."""
+        from pydantic_ai.settings import ModelSettings
+
         from exnot.ai.agents.section_extractor import section_extractor_agent
-        from exnot.ai.agents.table_classifier import classify_tables_hybrid
         from exnot.ai.cost import CostTracker
         from exnot.ai.deps import ExtractionDeps
         from exnot.ai.models import ModelRegistry, TaskType
@@ -71,7 +83,6 @@ class AIExtractor:
             split_document,
         )
         from exnot.parser.table_classifier import classify_tables as rule_classify_tables
-        from pydantic_ai.settings import ModelSettings
 
         settings = get_settings()
         registry = ModelRegistry(settings)
@@ -104,6 +115,7 @@ class AIExtractor:
             document=document,
             sections=sections,
             section_groups=section_groups,
+            event_emitter=event_emitter,
         )
 
         logger.info(f"[{exchange_code}] Starting direct extraction pipeline")
@@ -159,14 +171,28 @@ class AIExtractor:
 
             prompt = "\n".join(prompt_parts)
 
+            # Emit AI_CALL_START event
+            if event_emitter:
+                try:
+                    event_emitter.emit(
+                        AgentEventType.AI_CALL_START,
+                        f"extract_section:{section_info[:50]}",
+                        model=extraction_model_name,
+                        prompt_text=prompt,
+                    )
+                except Exception:
+                    pass
+
+            start_time = time.time()
             result = await section_extractor_agent.run(
                 prompt,
                 deps=deps,
                 model=extraction_model,
                 model_settings=ModelSettings(max_tokens=16384),
             )
+            elapsed_ms = int((time.time() - start_time) * 1000)
 
-            cost_tracker.record(
+            cost = cost_tracker.record(
                 task=f"extract_section:{section_info[:50]}",
                 model=extraction_model_name,
                 usage=result.usage(),
@@ -176,8 +202,24 @@ class AIExtractor:
             fee_dicts = [f.model_dump() for f in output.fees]
             deps.extracted_fees.extend(fee_dicts)
 
+            # Emit AI_CALL_COMPLETE event
+            if event_emitter:
+                try:
+                    event_emitter.emit(
+                        AgentEventType.AI_CALL_COMPLETE,
+                        f"extract_section:{section_info[:50]}",
+                        model=extraction_model_name,
+                        response_text=str([f.model_dump() for f in output.fees][:5]),
+                        input_tokens=result.usage().input_tokens or 0,
+                        output_tokens=result.usage().output_tokens or 0,
+                        cost_usd=cost,
+                        latency_ms=elapsed_ms,
+                    )
+                except Exception:
+                    pass
+
             logger.info(
-                f"[{exchange_code}] Group {gi}/{len(section_groups)-1}: "
+                f"[{exchange_code}] Group {gi}/{len(section_groups) - 1}: "
                 f"{len(output.fees)} fees (total {len(deps.extracted_fees)})"
             )
 
@@ -222,14 +264,18 @@ class AIExtractor:
         return "\n".join(parts)[:8000]
 
     async def _run_validation(
-        self, deps, cost_tracker, registry,
+        self,
+        deps,
+        cost_tracker,
+        registry,
     ) -> float:
         """Run fee validation agent and return confidence score."""
         import json
 
+        from pydantic_ai.settings import ModelSettings
+
         from exnot.ai.agents.fee_validator import fee_validator_agent
         from exnot.ai.models import TaskType
-        from pydantic_ai.settings import ModelSettings
 
         fees_json = json.dumps(deps.extracted_fees)
         prompt = (
@@ -238,20 +284,52 @@ class AIExtractor:
         )
 
         model = deps.model_registry.get_model(TaskType.FEE_VALIDATION)
+        model_name = deps.model_registry.get_model_name(TaskType.FEE_VALIDATION)
+        event_emitter = deps.event_emitter
+
+        # Emit AI_CALL_START for validation
+        if event_emitter:
+            try:
+                event_emitter.emit(
+                    AgentEventType.AI_CALL_START,
+                    "validate_extraction",
+                    model=model_name,
+                    prompt_text=prompt,
+                )
+            except Exception:
+                pass
+
         try:
+            start_time = time.time()
             result = await fee_validator_agent.run(
                 prompt,
                 deps=deps,
                 model=model,
                 model_settings=ModelSettings(max_tokens=8192),
             )
+            elapsed_ms = int((time.time() - start_time) * 1000)
 
-            model_name = deps.model_registry.get_model_name(TaskType.FEE_VALIDATION)
-            cost_tracker.record(
+            cost = cost_tracker.record(
                 task="validate_extraction",
                 model=model_name,
                 usage=result.usage(),
             )
+
+            # Emit AI_CALL_COMPLETE for validation
+            if event_emitter:
+                try:
+                    event_emitter.emit(
+                        AgentEventType.AI_CALL_COMPLETE,
+                        "validate_extraction",
+                        model=model_name,
+                        response_text=str(result.output.model_dump()),
+                        input_tokens=result.usage().input_tokens or 0,
+                        output_tokens=result.usage().output_tokens or 0,
+                        cost_usd=cost,
+                        latency_ms=elapsed_ms,
+                    )
+                except Exception:
+                    pass
 
             return result.output.confidence
         except Exception as e:
@@ -259,8 +337,11 @@ class AIExtractor:
             return self._compute_confidence_from_fees(deps.extracted_fees)
 
     def _build_orchestrator_prompt(
-        self, document: ExtractedDocument, exchange_code: str,
-        sections: list | None = None, section_groups: list | None = None,
+        self,
+        document: ExtractedDocument,
+        exchange_code: str,
+        sections: list | None = None,
+        section_groups: list | None = None,
     ) -> str:
         """Build a compact prompt for the orchestrator with pre-computed section plan."""
         markdown = document.metadata.get("markdown")
@@ -292,9 +373,7 @@ class AIExtractor:
                             global_indices.append(si)
                             break
                 headings = [s.heading[:40] for s in group.sections]
-                prompt_parts.append(
-                    f"  Group {gi}: sections {global_indices} — {group.total_chars} chars — {headings}"
-                )
+                prompt_parts.append(f"  Group {gi}: sections {global_indices} — {group.total_chars} chars — {headings}")
 
             prompt_parts.append(
                 "\nYou MUST call extract_section once for EACH group above. "
