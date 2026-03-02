@@ -44,9 +44,7 @@ def daily_fee_schedule_check():
 
     session = get_sync_session()
     try:
-        exchanges = session.execute(
-            select(Exchange).where(Exchange.is_active.is_(True))
-        ).scalars().all()
+        exchanges = session.execute(select(Exchange).where(Exchange.is_active.is_(True))).scalars().all()
 
         exchange_codes = [ex.code for ex in exchanges]
         logger.info(f"Found {len(exchange_codes)} active exchanges: {exchange_codes}")
@@ -99,19 +97,19 @@ def discover_all_exchange_urls(force: bool = False):
     session = get_sync_session()
     try:
         if force:
-            exchanges = (
-                session.execute(select(Exchange).where(Exchange.is_active.is_(True))).scalars().all()
-            )
+            exchanges = session.execute(select(Exchange).where(Exchange.is_active.is_(True))).scalars().all()
         else:
             exchanges = (
                 session.execute(
                     select(Exchange).where(
                         Exchange.is_active.is_(True),
-                        Exchange.discovery_status.in_([
-                            DiscoveryStatus.NOT_DISCOVERED,
-                            DiscoveryStatus.FAILED,
-                            DiscoveryStatus.STALE,
-                        ]),
+                        Exchange.discovery_status.in_(
+                            [
+                                DiscoveryStatus.NOT_DISCOVERED,
+                                DiscoveryStatus.FAILED,
+                                DiscoveryStatus.STALE,
+                            ]
+                        ),
                     )
                 )
                 .scalars()
@@ -160,14 +158,11 @@ def scrape_and_process_exchange(self, exchange_code: str):
 
     session = get_sync_session()
     try:
-        change_report = run_scrape_pipeline(exchange_code, session)
+        change_report = run_scrape_pipeline(exchange_code, session, celery_task_id=self.request.id)
         session.commit()
 
         if change_report is not None and change_report.has_changes:
-            logger.info(
-                f"[{exchange_code}] {len(change_report.changes)} changes detected, "
-                f"triggering notifications"
-            )
+            logger.info(f"[{exchange_code}] {len(change_report.changes)} changes detected, triggering notifications")
             # Serialize the change report for the notification task
             report_json = json.dumps(asdict(change_report))
             send_change_notifications.delay(exchange_code, report_json)
@@ -204,9 +199,7 @@ def scrape_and_process_exchange(self, exchange_code: str):
 
 def _record_failure_log(exchange_code: str, session, error_message: str):
     """Record a failed scrape attempt in the scrape log."""
-    exchange = session.execute(
-        select(Exchange).where(Exchange.code == exchange_code)
-    ).scalar_one_or_none()
+    exchange = session.execute(select(Exchange).where(Exchange.code == exchange_code)).scalar_one_or_none()
 
     if exchange is None:
         return
@@ -253,19 +246,14 @@ def send_change_notifications(self, exchange_code: str, change_report_json: str)
         )
 
         # Get all active subscribers
-        subscribers = session.execute(
-            select(Subscriber).where(Subscriber.is_active.is_(True))
-        ).scalars().all()
+        subscribers = session.execute(select(Subscriber).where(Subscriber.is_active.is_(True))).scalars().all()
 
         # Filter by exchange preferences
-        matching_subscribers = _filter_subscribers_by_exchange(
-            subscribers, exchange_code
-        )
+        matching_subscribers = _filter_subscribers_by_exchange(subscribers, exchange_code)
 
         # Filter for IMMEDIATE frequency only
         immediate_subscribers = [
-            s for s in matching_subscribers
-            if s.notification_frequency == NotificationFrequency.IMMEDIATE
+            s for s in matching_subscribers if s.notification_frequency == NotificationFrequency.IMMEDIATE
         ]
 
         logger.info(
@@ -300,24 +288,24 @@ def send_change_notifications(self, exchange_code: str, change_report_json: str)
                 failed_count += 1
 
         # Mark FeeChange records as notified
-        unnotified_changes = session.execute(
-            select(FeeChange).where(
-                FeeChange.exchange_id == session.execute(
-                    select(Exchange.id).where(Exchange.code == exchange_code)
-                ).scalar_one(),
-                FeeChange.notified.is_(False),
+        unnotified_changes = (
+            session.execute(
+                select(FeeChange).where(
+                    FeeChange.exchange_id
+                    == session.execute(select(Exchange.id).where(Exchange.code == exchange_code)).scalar_one(),
+                    FeeChange.notified.is_(False),
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
         for change in unnotified_changes:
             change.notified = True
 
         session.commit()
 
-        logger.info(
-            f"[{exchange_code}] Notifications sent: {sent_count} succeeded, "
-            f"{failed_count} failed"
-        )
+        logger.info(f"[{exchange_code}] Notifications sent: {sent_count} succeeded, {failed_count} failed")
 
         return {
             "exchange_code": exchange_code,
@@ -357,14 +345,18 @@ def send_daily_digest(self):
         cutoff = datetime.utcnow() - timedelta(days=1)
 
         # Get unnotified changes from the last 24 hours
-        changes = session.execute(
-            select(FeeChange)
-            .where(
-                FeeChange.notified.is_(False),
-                FeeChange.detected_at >= cutoff,
+        changes = (
+            session.execute(
+                select(FeeChange)
+                .where(
+                    FeeChange.notified.is_(False),
+                    FeeChange.detected_at >= cutoff,
+                )
+                .order_by(FeeChange.detected_at.asc())
             )
-            .order_by(FeeChange.detected_at.asc())
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
         if not changes:
             logger.info("No unnotified changes in the last 24 hours for daily digest")
@@ -377,12 +369,16 @@ def send_daily_digest(self):
         reports = _build_reports_from_grouped_changes(changes_by_exchange)
 
         # Get DAILY_DIGEST subscribers
-        subscribers = session.execute(
-            select(Subscriber).where(
-                Subscriber.is_active.is_(True),
-                Subscriber.notification_frequency == NotificationFrequency.DAILY_DIGEST,
+        subscribers = (
+            session.execute(
+                select(Subscriber).where(
+                    Subscriber.is_active.is_(True),
+                    Subscriber.notification_frequency == NotificationFrequency.DAILY_DIGEST,
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
         logger.info(
             f"Daily digest: {len(changes)} changes across "
@@ -394,9 +390,7 @@ def send_daily_digest(self):
 
         for subscriber in subscribers:
             # Filter reports by subscriber's exchange preferences
-            filtered_reports = _filter_reports_for_subscriber(
-                reports, subscriber
-            )
+            filtered_reports = _filter_reports_for_subscriber(reports, subscriber)
             if not filtered_reports:
                 continue
 
@@ -459,11 +453,13 @@ def send_weekly_summary(self):
         cutoff = datetime.utcnow() - timedelta(days=7)
 
         # Get all changes from the last 7 days (regardless of notified status)
-        changes = session.execute(
-            select(FeeChange)
-            .where(FeeChange.detected_at >= cutoff)
-            .order_by(FeeChange.detected_at.asc())
-        ).scalars().all()
+        changes = (
+            session.execute(
+                select(FeeChange).where(FeeChange.detected_at >= cutoff).order_by(FeeChange.detected_at.asc())
+            )
+            .scalars()
+            .all()
+        )
 
         if not changes:
             logger.info("No changes in the last 7 days for weekly summary")
@@ -476,12 +472,16 @@ def send_weekly_summary(self):
         reports = _build_reports_from_grouped_changes(changes_by_exchange)
 
         # Get WEEKLY subscribers
-        subscribers = session.execute(
-            select(Subscriber).where(
-                Subscriber.is_active.is_(True),
-                Subscriber.notification_frequency == NotificationFrequency.WEEKLY,
+        subscribers = (
+            session.execute(
+                select(Subscriber).where(
+                    Subscriber.is_active.is_(True),
+                    Subscriber.notification_frequency == NotificationFrequency.WEEKLY,
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
         logger.info(
             f"Weekly summary: {len(changes)} changes across "
@@ -492,9 +492,7 @@ def send_weekly_summary(self):
         sent_count = 0
 
         for subscriber in subscribers:
-            filtered_reports = _filter_reports_for_subscriber(
-                reports, subscriber
-            )
+            filtered_reports = _filter_reports_for_subscriber(reports, subscriber)
             if not filtered_reports:
                 continue
 
@@ -543,9 +541,7 @@ def cleanup_old_scrape_logs(days: int = 90):
     try:
         cutoff = datetime.utcnow() - timedelta(days=days)
 
-        result = session.execute(
-            delete(ScrapeLog).where(ScrapeLog.started_at < cutoff)
-        )
+        result = session.execute(delete(ScrapeLog).where(ScrapeLog.started_at < cutoff))
 
         deleted_count = result.rowcount
         session.commit()
@@ -566,9 +562,7 @@ def cleanup_old_scrape_logs(days: int = 90):
 # ---------------------------------------------------------------------------
 
 
-def _filter_subscribers_by_exchange(
-    subscribers: list[Subscriber], exchange_code: str
-) -> list[Subscriber]:
+def _filter_subscribers_by_exchange(subscribers: list[Subscriber], exchange_code: str) -> list[Subscriber]:
     """Filter subscribers to those interested in the given exchange.
 
     If a subscriber's exchanges_filter is None, they receive all exchanges.
@@ -590,15 +584,11 @@ def _filter_subscribers_by_exchange(
     return matching
 
 
-def _group_changes_by_exchange(
-    changes: list[FeeChange], session
-) -> dict[str, list[FeeChange]]:
+def _group_changes_by_exchange(changes: list[FeeChange], session) -> dict[str, list[FeeChange]]:
     """Group FeeChange records by their exchange code."""
     # Build an exchange_id -> code mapping
     exchange_ids = {c.exchange_id for c in changes}
-    exchanges = session.execute(
-        select(Exchange).where(Exchange.id.in_(exchange_ids))
-    ).scalars().all()
+    exchanges = session.execute(select(Exchange).where(Exchange.id.in_(exchange_ids))).scalars().all()
     id_to_code = {ex.id: ex.code for ex in exchanges}
 
     grouped: dict[str, list[FeeChange]] = {}
@@ -620,7 +610,9 @@ def _build_reports_from_grouped_changes(
             change_entries.append(
                 FeeChangeEntry(
                     change_type=c.change_type.value if hasattr(c.change_type, "value") else c.change_type,
-                    participant_type=c.participant_type.value if hasattr(c.participant_type, "value") else c.participant_type,
+                    participant_type=c.participant_type.value
+                    if hasattr(c.participant_type, "value")
+                    else c.participant_type,
                     security_class=c.security_class.value if hasattr(c.security_class, "value") else c.security_class,
                     order_type=c.order_type.value if hasattr(c.order_type, "value") else c.order_type,
                     fee_type=c.fee_type.value if hasattr(c.fee_type, "value") else c.fee_type,
@@ -642,9 +634,7 @@ def _build_reports_from_grouped_changes(
     return reports
 
 
-def _filter_reports_for_subscriber(
-    reports: list[ChangeReport], subscriber: Subscriber
-) -> list[ChangeReport]:
+def _filter_reports_for_subscriber(reports: list[ChangeReport], subscriber: Subscriber) -> list[ChangeReport]:
     """Filter change reports based on subscriber's exchange preferences."""
     if subscriber.exchanges_filter is None:
         return reports

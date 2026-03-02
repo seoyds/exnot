@@ -134,6 +134,11 @@ class AIExtractor:
                 logger.warning(f"[{exchange_code}] Over budget at group {gi}, stopping extraction")
                 break
 
+            # Check cancellation before each group
+            if event_emitter and event_emitter.is_cancelled():
+                logger.info(f"[{exchange_code}] Cancelled at group {gi}")
+                break
+
             headings = [s.heading[:40] for s in group.sections]
             section_info = f"Group {gi}: {', '.join(headings)}"
 
