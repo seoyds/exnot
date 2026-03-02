@@ -6,6 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from exnot.db.models import (
+    AgentEvent,
+    AgentRun,
+    AgentRunStatus,
     Exchange,
     ExchangeProfile,
     FeeChange,
@@ -306,3 +309,57 @@ class ExchangeProfileRepository:
     async def update(self, profile: ExchangeProfile) -> ExchangeProfile:
         await self.session.flush()
         return profile
+
+
+class AgentRunRepository:
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def create(self, run: AgentRun) -> AgentRun:
+        self.session.add(run)
+        await self.session.flush()
+        return run
+
+    async def get_by_id(self, run_id: uuid.UUID) -> AgentRun | None:
+        stmt = select(AgentRun).where(AgentRun.id == run_id).options(selectinload(AgentRun.exchange))
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def get_active(self) -> list[AgentRun]:
+        stmt = (
+            select(AgentRun)
+            .where(AgentRun.status == AgentRunStatus.RUNNING)
+            .options(selectinload(AgentRun.exchange))
+            .order_by(AgentRun.started_at.desc())
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def get_recent(self, limit: int = 50) -> list[AgentRun]:
+        stmt = (
+            select(AgentRun)
+            .options(selectinload(AgentRun.exchange))
+            .order_by(AgentRun.started_at.desc())
+            .limit(limit)
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+
+class AgentEventRepository:
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def create(self, event: AgentEvent) -> AgentEvent:
+        self.session.add(event)
+        await self.session.flush()
+        return event
+
+    async def get_for_run(self, run_id: uuid.UUID) -> list[AgentEvent]:
+        stmt = (
+            select(AgentEvent)
+            .where(AgentEvent.run_id == run_id)
+            .order_by(AgentEvent.seq)
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
