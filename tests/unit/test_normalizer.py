@@ -3,7 +3,7 @@
 from decimal import Decimal
 
 from exnot.normalizer.engine import NormalizationEngine
-from exnot.normalizer.schema import FeeType, FeeUnit, ParticipantType, SecurityClass
+from exnot.normalizer.schema import FeeType, FeeUnit, OrderType, ParticipantType, SecurityClass
 from exnot.parser.ai_extractor import ExtractionResult
 
 
@@ -289,3 +289,157 @@ class TestV3SchemaEnums:
         assert OriginCode.BROKER_DEALER == "BROKER_DEALER"
         assert OriginCode.MARKET_MAKER == "MARKET_MAKER"
         assert OriginCode.AWAY_MARKET_MAKER == "AWAY_MARKET_MAKER"
+
+
+class TestV3Normalization:
+    def setup_method(self):
+        self.engine = NormalizationEngine()
+
+    def test_normalize_v3_fee(self):
+        """V3-style raw fee dict should normalize correctly."""
+        extraction = ExtractionResult(
+            raw_fees=[
+                {
+                    "fee_id": "PY",
+                    "fee_name": "Customer Penny Maker",
+                    "origin_code": "CUSTOMER",
+                    "contra_origin_code": None,
+                    "product_type": "SIMPLE",
+                    "listing_type": "EQUITY",
+                    "penny_class": "PENNY",
+                    "exec_venue": "ELECTRONIC",
+                    "liquidity_role": "MAKER",
+                    "auction_type": None,
+                    "fee_type": "PER_CONTRACT",
+                    "fee_value": -0.50,
+                    "is_rebate": True,
+                    "tier_level": 0,
+                    "tier_condition": None,
+                },
+            ],
+            confidence=0.95,
+        )
+        schedule = self.engine.normalize(extraction, "CBOE_BZX")
+        assert len(schedule.fees) == 1
+        fee = schedule.fees[0]
+        assert fee.participant_type == ParticipantType.CUSTOMER
+        assert fee.fee_type == FeeType.MAKER
+        assert fee.amount == Decimal("-0.50")
+        assert fee.is_rebate is True
+        assert fee.security_class == SecurityClass.PENNY
+        assert fee.order_type == OrderType.SIMPLE
+        assert fee.fee_code == "PY"
+
+    def test_normalize_v3_with_contra(self):
+        """V3 contra_origin_code: ANY maps to NON_CUSTOMER."""
+        extraction = ExtractionResult(
+            raw_fees=[
+                {
+                    "fee_name": "Customer vs Non-Customer Complex Maker",
+                    "origin_code": "CUSTOMER",
+                    "contra_origin_code": "ANY",
+                    "product_type": "COMPLEX",
+                    "listing_type": "EQUITY",
+                    "penny_class": "PENNY",
+                    "exec_venue": "ELECTRONIC",
+                    "liquidity_role": "MAKER",
+                    "fee_type": "PER_CONTRACT",
+                    "fee_value": -0.40,
+                    "is_rebate": True,
+                },
+            ],
+            confidence=0.9,
+        )
+        schedule = self.engine.normalize(extraction, "CBOE_BZX")
+        assert schedule.fees[0].contra_party_type == ParticipantType.NON_CUSTOMER
+        assert schedule.fees[0].order_type == OrderType.COMPLEX
+
+    def test_normalize_v3_index(self):
+        """V3 listing_type: INDEX should map to SecurityClass.INDEX."""
+        extraction = ExtractionResult(
+            raw_fees=[
+                {
+                    "fee_name": "RUT Index Fee",
+                    "origin_code": "CUSTOMER",
+                    "product_type": "SIMPLE",
+                    "listing_type": "INDEX",
+                    "penny_class": "NON_PENNY",
+                    "symbol": "RUT",
+                    "exec_venue": "ELECTRONIC",
+                    "liquidity_role": "TAKER",
+                    "fee_type": "PER_CONTRACT",
+                    "fee_value": 0.45,
+                    "is_rebate": False,
+                },
+            ],
+            confidence=0.9,
+        )
+        schedule = self.engine.normalize(extraction, "CBOE_BZX")
+        assert schedule.fees[0].security_class == SecurityClass.INDEX
+        assert schedule.fees[0].symbol == "RUT"
+        assert schedule.fees[0].fee_type == FeeType.TAKER
+
+    def test_normalize_v3_auction(self):
+        """V3 auction_type should map to appropriate order_type."""
+        extraction = ExtractionResult(
+            raw_fees=[
+                {
+                    "fee_name": "AIM Agency",
+                    "origin_code": "CUSTOMER",
+                    "product_type": "SIMPLE",
+                    "listing_type": "EQUITY",
+                    "penny_class": "PENNY",
+                    "exec_venue": "ELECTRONIC",
+                    "liquidity_role": "NONE",
+                    "auction_type": "AIM",
+                    "auction_role": "AGENCY",
+                    "fee_type": "PER_CONTRACT",
+                    "fee_value": 0.00,
+                    "is_rebate": False,
+                },
+            ],
+            confidence=0.9,
+        )
+        schedule = self.engine.normalize(extraction, "CBOE_EDGX")
+        assert schedule.fees[0].order_type == OrderType.AUCTION
+
+    def test_normalize_v3_routed(self):
+        """V3 exec_venue: ROUTED should map to order_type ROUTED."""
+        extraction = ExtractionResult(
+            raw_fees=[
+                {
+                    "fee_name": "Routed Penny",
+                    "origin_code": "CUSTOMER",
+                    "product_type": "SIMPLE",
+                    "listing_type": "EQUITY",
+                    "penny_class": "PENNY",
+                    "exec_venue": "ROUTED",
+                    "liquidity_role": "NONE",
+                    "fee_type": "PER_CONTRACT",
+                    "fee_value": 0.25,
+                    "is_rebate": False,
+                },
+            ],
+            confidence=0.9,
+        )
+        schedule = self.engine.normalize(extraction, "CBOE_BZX")
+        assert schedule.fees[0].order_type == OrderType.ROUTED
+
+    def test_v2_still_works(self):
+        """V2-format fees should still normalize correctly (no regression)."""
+        extraction = ExtractionResult(
+            raw_fees=[
+                {
+                    "participant_type": "CUSTOMER",
+                    "security_class": "PENNY",
+                    "order_type": "SIMPLE",
+                    "fee_type": "MAKER",
+                    "amount": -0.25,
+                    "is_rebate": True,
+                },
+            ],
+            confidence=0.9,
+        )
+        schedule = self.engine.normalize(extraction, "TEST")
+        assert schedule.fees[0].participant_type == ParticipantType.CUSTOMER
+        assert schedule.fees[0].fee_type == FeeType.MAKER

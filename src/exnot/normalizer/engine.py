@@ -205,6 +205,11 @@ class NormalizationEngine:
 
     def _normalize_entry(self, raw: dict, exchange_code: str) -> NormalizedFeeEntry | None:
         """Normalize a single raw fee entry."""
+        # Detect V3 format (from per-exchange prompts)
+        if "origin_code" in raw and raw.get("origin_code"):
+            return self._normalize_v3_entry(raw, exchange_code)
+
+        # V2 format (legacy)
         participant_type = self._map_participant(raw.get("participant_type", ""))
         security_class = self._map_security(raw.get("security_class", ""))
         order_type = self._map_order(raw.get("order_type", ""))
@@ -261,6 +266,123 @@ class NormalizationEngine:
             volume_tier=raw.get("volume_tier"),
             tier_threshold_pct=raw.get("tier_threshold_pct"),
             tier_threshold_contracts=raw.get("tier_threshold_contracts"),
+        )
+
+    def _normalize_v3_entry(self, raw: dict, exchange_code: str) -> NormalizedFeeEntry | None:
+        """Normalize a V3-format fee entry from per-exchange prompts."""
+        # Map origin_code to participant_type
+        origin = raw.get("origin_code", "")
+        participant_type = self._map_participant(origin)
+        if not participant_type:
+            logger.warning(f"Unmappable V3 origin_code: {origin!r}")
+            return None
+
+        # Map contra_origin_code
+        contra = raw.get("contra_origin_code")
+        contra_party_type = None
+        if contra:
+            if contra == "ANY":
+                contra_party_type = ParticipantType.NON_CUSTOMER
+            else:
+                contra_party_type = self._map_participant(contra)
+
+        # Map security_class from listing_type + penny_class
+        listing_type = raw.get("listing_type", "")
+        penny_class = raw.get("penny_class", "")
+        if listing_type == "INDEX":
+            security_class = SecurityClass.INDEX
+        elif penny_class == "PENNY":
+            security_class = SecurityClass.PENNY
+        elif penny_class == "NON_PENNY":
+            security_class = SecurityClass.NON_PENNY
+        elif listing_type == "ETF":
+            security_class = SecurityClass.ETF
+        elif listing_type == "EQUITY":
+            security_class = SecurityClass.EQUITY
+        else:
+            security_class = SecurityClass.EQUITY
+
+        # Map order_type from product_type + auction_type + exec_venue
+        auction_type = raw.get("auction_type")
+        exec_venue = raw.get("exec_venue", "")
+        product_type = raw.get("product_type", "SIMPLE")
+
+        if exec_venue == "ROUTED":
+            order_type = OrderType.ROUTED
+        elif auction_type:
+            # Map auction types to order types
+            auction_order_map = {
+                "AIM": OrderType.AUCTION,
+                "SAM": OrderType.AUCTION,
+                "PRIME": OrderType.PIM,
+                "CPRIME": OrderType.PIM,
+                "PIM": OrderType.PIM,
+                "PIXL": OrderType.PIM,
+                "CUBE": OrderType.PIM,
+                "PIP": OrderType.PIM,
+                "COPIP": OrderType.PIM,
+                "QCC": OrderType.QCC,
+                "CQCC": OrderType.QCC,
+                "QFO": OrderType.QCC,
+                "CQFO": OrderType.QCC,
+                "FAC": OrderType.CROSSING,
+                "SOL": OrderType.CROSSING,
+                "CROSSING": OrderType.CROSSING,
+                "C2C": OrderType.CROSSING,
+                "CC2C": OrderType.CROSSING,
+                "BOLD": OrderType.AUCTION,
+                "FLEX": OrderType.FLEX,
+                "OPENING": OrderType.OPENING,
+            }
+            order_type = auction_order_map.get(auction_type, OrderType.AUCTION)
+        elif product_type == "COMPLEX":
+            order_type = OrderType.COMPLEX
+        else:
+            order_type = OrderType.SIMPLE
+
+        # Map liquidity_role to fee_type
+        liquidity_role = raw.get("liquidity_role", "")
+        if liquidity_role == "MAKER":
+            fee_type = FeeType.MAKER
+        elif liquidity_role == "TAKER":
+            fee_type = FeeType.TAKER
+        elif exec_venue == "ROUTED":
+            fee_type = FeeType.ROUTING
+        else:
+            fee_type = FeeType.TRANSACTION
+
+        # Map fee_unit from V3 fee_type field
+        v3_fee_type = raw.get("fee_type", "PER_CONTRACT")
+        fee_unit = self._map_fee_unit(v3_fee_type)
+
+        # Parse amount from fee_value
+        try:
+            amount = Decimal(str(raw.get("fee_value", 0)))
+        except (InvalidOperation, TypeError):
+            logger.warning(f"Invalid fee_value in V3 entry: {raw.get('fee_value')}")
+            return None
+
+        is_rebate = raw.get("is_rebate", False)
+        if is_rebate and amount > 0:
+            amount = -amount
+        elif not is_rebate and amount < 0:
+            is_rebate = True
+
+        return NormalizedFeeEntry(
+            exchange_code=exchange_code,
+            fee_code=raw.get("fee_id"),
+            participant_type=participant_type,
+            contra_party_type=contra_party_type,
+            security_class=security_class,
+            symbol=raw.get("symbol"),
+            order_type=order_type,
+            fee_type=fee_type,
+            fee_unit=fee_unit or FeeUnit.PER_CONTRACT,
+            amount=amount,
+            is_rebate=is_rebate,
+            tier_number=raw.get("tier_level"),
+            notes=raw.get("tier_condition") or raw.get("notes"),
+            section_ref=raw.get("section_ref"),
         )
 
     def _map_participant(self, value: str) -> ParticipantType | None:
