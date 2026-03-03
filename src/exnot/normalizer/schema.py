@@ -161,6 +161,21 @@ class NormalizedFeeEntry(BaseModel):
     tier_threshold_pct: float | None = None
     tier_threshold_contracts: int | None = None
 
+    # V3 dimensions (preserved for DB storage)
+    origin_code: str | None = None
+    contra_origin_code: str | None = None
+    product_type_v3: str | None = None
+    listing_type: str | None = None
+    penny_class: str | None = None
+    multi_listed: bool | None = None
+    exec_venue: str | None = None
+    liquidity_role: str | None = None
+    auction_type: str | None = None
+    auction_role: str | None = None
+    fee_name: str | None = None
+    tier_level: int | None = None
+    tier_condition_text: str | None = None
+
     @property
     def amount_cents(self) -> int:
         """Amount in hundredths of a cent for database storage."""

@@ -383,6 +383,20 @@ class NormalizationEngine:
             tier_number=raw.get("tier_level"),
             notes=raw.get("tier_condition") or raw.get("notes"),
             section_ref=raw.get("section_ref"),
+            # V3 dimensions
+            origin_code=raw.get("origin_code"),
+            contra_origin_code=raw.get("contra_origin_code"),
+            product_type_v3=raw.get("product_type"),
+            listing_type=raw.get("listing_type"),
+            penny_class=raw.get("penny_class"),
+            multi_listed=raw.get("multi_listed"),
+            exec_venue=raw.get("exec_venue"),
+            liquidity_role=raw.get("liquidity_role"),
+            auction_type=raw.get("auction_type"),
+            auction_role=raw.get("auction_role"),
+            fee_name=raw.get("fee_name"),
+            tier_level=raw.get("tier_level"),
+            tier_condition_text=raw.get("tier_condition"),
         )
 
     def _map_participant(self, value: str) -> ParticipantType | None:

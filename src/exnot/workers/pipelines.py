@@ -657,7 +657,7 @@ def _save_normalized_fees(
             is_rebate=entry.is_rebate,
             fee_code=entry.fee_code,
             contra_party_type=entry.contra_party_type.value if entry.contra_party_type else None,
-            symbol=entry.symbol,
+            symbol=entry.symbol[:256] if entry.symbol else None,
             fee_unit=entry.fee_unit.value if entry.fee_unit else "PER_CONTRACT",
             tier_id=tier_id,
             routing_destination=entry.routing_destination,
@@ -670,6 +670,20 @@ def _save_normalized_fees(
             volume_tier=entry.volume_tier,
             tier_threshold_pct=entry.tier_threshold_pct,
             tier_threshold_contracts=entry.tier_threshold_contracts,
+            # V3 dimensions
+            origin_code=entry.origin_code,
+            contra_origin_code=entry.contra_origin_code,
+            product_type=entry.product_type_v3,
+            listing_type=entry.listing_type,
+            penny_class=entry.penny_class,
+            multi_listed=entry.multi_listed,
+            exec_venue=entry.exec_venue,
+            liquidity_role=entry.liquidity_role,
+            auction_type=entry.auction_type,
+            auction_role=entry.auction_role,
+            fee_name=entry.fee_name,
+            tier_level=entry.tier_level,
+            tier_condition_text=entry.tier_condition_text,
         )
         db_fees.append(fee)
 
