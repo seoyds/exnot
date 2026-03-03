@@ -242,13 +242,13 @@ class NormalizedFee(Base):
         UUID(as_uuid=True), ForeignKey("exchanges.id"), nullable=False, index=True
     )
     # Core dimensions
-    fee_code: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    fee_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
     participant_type: Mapped[ParticipantType] = mapped_column(Enum(ParticipantType), nullable=False)
     contra_party_type: Mapped[ParticipantType | None] = mapped_column(
         Enum(ParticipantType, name="participanttype", create_constraint=False), nullable=True
     )
     security_class: Mapped[SecurityClass] = mapped_column(Enum(SecurityClass), nullable=False)
-    symbol: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    symbol: Mapped[str | None] = mapped_column(String(256), nullable=True)
     order_type: Mapped[OrderType] = mapped_column(Enum(OrderType), nullable=False)
     fee_type: Mapped[FeeType] = mapped_column(Enum(FeeType), nullable=False)
     fee_unit: Mapped[FeeUnit] = mapped_column(Enum(FeeUnit), nullable=False, server_default="PER_CONTRACT")
@@ -271,6 +271,21 @@ class NormalizedFee(Base):
     volume_tier: Mapped[str | None] = mapped_column(String(100), nullable=True)
     tier_threshold_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     tier_threshold_contracts: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # V3 dimensions (nullable for backward compat with existing data)
+    origin_code: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    contra_origin_code: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    product_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    listing_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    penny_class: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    multi_listed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    exec_venue: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    liquidity_role: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    auction_type: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    auction_role: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    fee_name: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    tier_level: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    tier_condition_text: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     snapshot: Mapped["FeeScheduleSnapshot"] = relationship(back_populates="normalized_fees")
     exchange: Mapped["Exchange"] = relationship(back_populates="normalized_fees")
