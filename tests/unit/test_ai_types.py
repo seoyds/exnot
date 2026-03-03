@@ -266,6 +266,16 @@ class TestExtractedFeeV3:
                 is_rebate=False,
             )
 
+    def test_fee_value_exceeds_limit_non_per_contract_is_allowed(self):
+        """fee_value > $10 should be OK when fee_type is not PER_CONTRACT."""
+        fee = ExtractedFee(
+            fee_name="Monthly Connectivity Fee",
+            fee_type="MONTHLY",
+            fee_value=500.00,
+            is_rebate=False,
+        )
+        assert fee.fee_value == 500.00
+
     def test_backward_compat_old_fields(self):
         """Old-style fields should still work (backward compat during transition)."""
         fee = ExtractedFee(
