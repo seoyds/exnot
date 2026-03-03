@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, model_validator
 
 
 class TierConditionCriterion(BaseModel):
@@ -25,18 +25,52 @@ class TierCondition(BaseModel):
 
 
 class ExtractedFee(BaseModel):
-    """Single fee entry — replaces the raw dict from current AI output."""
+    """Single fee entry extracted by AI.
 
-    fee_code: str | None = None
-    participant_type: str  # CUSTOMER | PROFESSIONAL | MARKET_MAKER | ...
-    contra_party_type: str | None = None
-    security_class: str  # PENNY | NON_PENNY | INDEX | ...
+    V3 fields (new schema — per-exchange prompts):
+    """
+
+    # --- V3 Identity ---
+    fee_id: str | None = None
+    fee_name: str | None = None
+
+    # --- V3 Origin ---
+    origin_code: str | None = None
+    contra_origin_code: str | None = None
+
+    # --- V3 Product Dimensions ---
+    product_type: str | None = None
+    contra_product_type: str | None = None
+    listing_type: str | None = None
+    penny_class: str | None = None
+    multi_listed: bool | None = None
     symbol: str | None = None
-    order_type: str  # SIMPLE | COMPLEX | AUCTION | ...
-    fee_type: str  # MAKER | TAKER | ROUTING | ...
-    fee_unit: str = "PER_CONTRACT"
-    amount: float
+
+    # --- V3 Execution Type (layered) ---
+    exec_venue: str | None = None
+    liquidity_role: str | None = None
+    auction_type: str | None = None
+    auction_role: str | None = None
+
+    # --- V3 Fee Value ---
+    fee_value: float | None = None
     is_rebate: bool = False
+
+    # --- V3 Fee Unit (shared field name with V2, different semantics) ---
+    fee_type: str | None = None
+
+    # --- V3 Tiers ---
+    tier_level: int | None = None
+    tier_condition: str | None = None
+
+    # --- Legacy V2 fields (kept for backward compat during migration) ---
+    fee_code: str | None = None
+    participant_type: str | None = None
+    contra_party_type: str | None = None
+    security_class: str | None = None
+    order_type: str | None = None
+    fee_unit: str = "PER_CONTRACT"
+    amount: float | None = None
     routing_destination: str | None = None
     tier_group: str | None = None
     tier_number: int | None = None
@@ -45,12 +79,21 @@ class ExtractedFee(BaseModel):
     section_ref: str | None = None
     notes: str | None = None
 
-    @field_validator("amount")
-    @classmethod
-    def validate_amount(cls, v: float) -> float:
-        if abs(v) > 10.0:
-            raise ValueError(f"Amount ${v} exceeds $10/contract — likely an error")
-        return v
+    @model_validator(mode="after")
+    def validate_amount(self) -> "ExtractedFee":
+        # V3 validation
+        if self.fee_value is not None and self.fee_type == "PER_CONTRACT" and abs(self.fee_value) > 10.0:
+            raise ValueError(
+                f"Amount ${self.fee_value} exceeds $10/contract — likely an error. "
+                f"If this is a flat/monthly fee, set fee_type to 'MONTHLY' or 'FLAT'."
+            )
+        # Legacy V2 validation
+        if self.amount is not None and self.fee_unit == "PER_CONTRACT" and abs(self.amount) > 10.0:
+            raise ValueError(
+                f"Amount ${self.amount} exceeds $10/contract — likely an error. "
+                f"If this is a flat/monthly fee, set fee_unit to 'MONTHLY' or 'FLAT'."
+            )
+        return self
 
 
 class SectionExtractionResult(BaseModel):

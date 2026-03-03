@@ -200,3 +200,81 @@ class TestChangeSummary:
         result = ChangeSummary()
         assert result.impact_level == "LOW"
         assert result.key_changes == []
+
+
+class TestExtractedFeeV3:
+    """Tests for the new per-exchange schema fields."""
+
+    def test_new_schema_fields(self):
+        fee = ExtractedFee(
+            fee_id="PY",
+            fee_name="Customer Penny Maker",
+            origin_code="CUSTOMER",
+            contra_origin_code="ANY",
+            product_type="SIMPLE",
+            contra_product_type=None,
+            listing_type="EQUITY",
+            penny_class="PENNY",
+            multi_listed=True,
+            symbol="SPY",
+            exec_venue="ELECTRONIC",
+            liquidity_role="MAKER",
+            auction_type=None,
+            auction_role=None,
+            fee_type="PER_CONTRACT",
+            fee_value=-0.50,
+            is_rebate=True,
+            tier_level=0,
+            tier_condition=None,
+        )
+        assert fee.origin_code == "CUSTOMER"
+        assert fee.exec_venue == "ELECTRONIC"
+        assert fee.fee_value == -0.50
+        assert fee.fee_id == "PY"
+
+    def test_minimal_fee_new_schema(self):
+        """Minimal fee with only required new fields."""
+        fee = ExtractedFee(
+            fee_name="Test Fee",
+            origin_code="MARKET_MAKER",
+            product_type="SIMPLE",
+            listing_type="EQUITY",
+            penny_class="PENNY",
+            exec_venue="ELECTRONIC",
+            liquidity_role="TAKER",
+            fee_type="PER_CONTRACT",
+            fee_value=0.50,
+            is_rebate=False,
+        )
+        assert fee.contra_origin_code is None
+        assert fee.fee_id is None
+        assert fee.tier_level is None
+
+    def test_fee_value_validation(self):
+        """fee_value exceeding $10/contract should fail for PER_CONTRACT."""
+        with pytest.raises(ValidationError, match="exceeds"):
+            ExtractedFee(
+                fee_name="Bad Fee",
+                origin_code="CUSTOMER",
+                product_type="SIMPLE",
+                listing_type="EQUITY",
+                penny_class="PENNY",
+                exec_venue="ELECTRONIC",
+                liquidity_role="TAKER",
+                fee_type="PER_CONTRACT",
+                fee_value=15.00,
+                is_rebate=False,
+            )
+
+    def test_backward_compat_old_fields(self):
+        """Old-style fields should still work (backward compat during transition)."""
+        fee = ExtractedFee(
+            participant_type="CUSTOMER",
+            security_class="PENNY",
+            order_type="SIMPLE",
+            fee_type="MAKER",
+            amount=-0.50,
+            is_rebate=True,
+        )
+        assert fee.participant_type == "CUSTOMER"
+        assert fee.amount == -0.50
