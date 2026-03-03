@@ -32,11 +32,16 @@ async def validate_extraction(
 ) -> SectionExtractionResult:
     """Validate and auto-correct sign/rebate consistency."""
     for fee in output.fees:
-        # Auto-correct: rebate flagged but amount is positive → flip sign
-        if fee.is_rebate and fee.amount > 0:
-            fee.amount = -fee.amount
-        # Auto-correct: negative amount but not flagged as rebate → flag it
-        elif not fee.is_rebate and fee.amount < 0:
-            fee.is_rebate = True
+        # V3 uses fee_value, V2 uses amount
+        if fee.fee_value is not None:
+            if fee.is_rebate and fee.fee_value > 0:
+                fee.fee_value = -fee.fee_value
+            elif not fee.is_rebate and fee.fee_value < 0:
+                fee.is_rebate = True
+        elif fee.amount is not None:
+            if fee.is_rebate and fee.amount > 0:
+                fee.amount = -fee.amount
+            elif not fee.is_rebate and fee.amount < 0:
+                fee.is_rebate = True
 
     return output

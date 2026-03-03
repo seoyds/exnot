@@ -350,9 +350,10 @@ async def validate_orchestrator_output(
             f"in the section plan. Do NOT skip groups."
         )
 
-    # Check for minimum fee variety
-    participant_types = {f.get("participant_type") for f in accumulated}
+    # Check for minimum fee variety (support both V2 and V3 field names)
+    participant_types = {f.get("participant_type") or f.get("origin_code") for f in accumulated}
     fee_types = {f.get("fee_type") for f in accumulated}
+    liquidity_roles = {f.get("liquidity_role") for f in accumulated}
     issues: list[str] = []
 
     if "CUSTOMER" not in participant_types and len(accumulated) > 5:
@@ -361,7 +362,13 @@ async def validate_orchestrator_output(
             "Check if the document uses 'Priority Customer' or 'Public Customer'."
         )
 
-    if "MAKER" not in fee_types and "TAKER" not in fee_types and len(accumulated) > 5:
+    if (
+        "MAKER" not in fee_types
+        and "TAKER" not in fee_types
+        and "MAKER" not in liquidity_roles
+        and "TAKER" not in liquidity_roles
+        and len(accumulated) > 5
+    ):
         issues.append("Missing both MAKER and TAKER fees — most exchanges have maker/taker pricing.")
 
     if issues:

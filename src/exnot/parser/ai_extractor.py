@@ -411,14 +411,16 @@ class AIExtractor:
             return 0.0
 
         score = 1.0
-        participant_types = {f.get("participant_type") for f in raw_fees}
+        # Support both V2 (participant_type) and V3 (origin_code) field names
+        participant_types = {f.get("participant_type") or f.get("origin_code") for f in raw_fees}
         fee_types = {f.get("fee_type") for f in raw_fees}
+        liquidity_roles = {f.get("liquidity_role") for f in raw_fees}
 
         if "CUSTOMER" not in participant_types:
             score -= 0.3
-        if "MAKER" not in fee_types:
+        if "MAKER" not in fee_types and "MAKER" not in liquidity_roles:
             score -= 0.2
-        if "TAKER" not in fee_types:
+        if "TAKER" not in fee_types and "TAKER" not in liquidity_roles:
             score -= 0.2
         if len(participant_types) < 2:
             score -= 0.15

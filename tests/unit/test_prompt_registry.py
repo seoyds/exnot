@@ -39,9 +39,10 @@ class TestPromptRegistry:
             assert len(prompt) > 200, f"Prompt for {code} is too short"
             assert "EXCHANGE:" in prompt
 
-    def test_unknown_exchange_raises(self):
-        with pytest.raises(KeyError):
-            get_extraction_prompt("UNKNOWN_EX")
+    def test_unknown_exchange_falls_back_to_base(self):
+        prompt = get_extraction_prompt("UNKNOWN_EX")
+        assert "origin_code" in prompt  # Base prompt content
+        assert "EXCHANGE:" not in prompt  # No exchange-specific section
 
     def test_prompt_contains_base(self):
         """Every prompt should include the base schema/rules."""
