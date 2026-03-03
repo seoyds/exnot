@@ -191,9 +191,9 @@ async def extract_section(
     if context_text:
         prompt_parts.append(f"\nREFERENCE CONTEXT (definitions, footnotes, glossary):\n{context_text}")
 
-    # Add exchange-specific hints
-    if ctx.deps.exchange_hints:
-        prompt_parts.append(f"\n{ctx.deps.exchange_hints}")
+    # Add exchange-specific prompt
+    if ctx.deps.exchange_prompt:
+        prompt_parts.append(f"\n{ctx.deps.exchange_prompt}")
 
     prompt = "\n".join(prompt_parts)
 
@@ -306,8 +306,8 @@ async def correct_extraction(
         f"Document context:\n{doc_context}\n"
     )
 
-    if ctx.deps.exchange_hints:
-        prompt += f"\n{ctx.deps.exchange_hints}\n"
+    if ctx.deps.exchange_prompt:
+        prompt += f"\n{ctx.deps.exchange_prompt}\n"
 
     model = ctx.deps.model_registry.get_model(TaskType.CORRECTION)
     result = await correction_agent.run(

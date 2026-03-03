@@ -9,9 +9,14 @@ import logging
 import time
 from dataclasses import dataclass, field
 
+from pydantic_ai.exceptions import UnexpectedModelBehavior
+
 from exnot.config import get_settings
 from exnot.db.models import AgentEventType
 from exnot.parser.base import ExtractedDocument
+
+AI_CALL_MAX_RETRIES = 3
+AI_CALL_RETRY_DELAY = 5  # seconds
 
 logger = logging.getLogger(__name__)
 
@@ -70,13 +75,11 @@ class AIExtractor:
         event_emitter=None,
     ) -> ExtractionResult:
         """Async extraction: direct group iteration + validation/correction agents."""
-        from pydantic_ai.settings import ModelSettings
-
         from exnot.ai.agents.section_extractor import section_extractor_agent
         from exnot.ai.cost import CostTracker
         from exnot.ai.deps import ExtractionDeps
         from exnot.ai.models import ModelRegistry, TaskType
-        from exnot.parser.extraction_hints import get_hints_for_exchange
+        from exnot.ai.prompts.registry import get_extraction_prompt
         from exnot.parser.section_splitter import (
             classify_context_sections,
             group_sections,
@@ -91,8 +94,7 @@ class AIExtractor:
             budget_usd=self.budget_per_exchange,
         )
 
-        hints = get_hints_for_exchange(exchange_code)
-        exchange_hints = hints.get("prompt_addition", "")
+        exchange_prompt = get_extraction_prompt(exchange_code)
 
         # Pre-split document into sections and groups
         format_hint = document.metadata.get("parser", "pdf")
@@ -111,7 +113,7 @@ class AIExtractor:
             model_registry=registry,
             cost_tracker=cost_tracker,
             exchange_code=exchange_code,
-            exchange_hints=exchange_hints,
+            exchange_prompt=exchange_prompt,
             document=document,
             sections=sections,
             section_groups=section_groups,
@@ -128,6 +130,7 @@ class AIExtractor:
         MAX_TABLE_ROWS = 50
         extraction_model = registry.get_model(TaskType.FEE_EXTRACTION)
         extraction_model_name = registry.get_model_name(TaskType.FEE_EXTRACTION)
+        extraction_model_settings = registry.get_model_settings(TaskType.FEE_EXTRACTION, max_tokens=16384)
 
         for gi, group in enumerate(section_groups):
             if cost_tracker.is_over_budget:
@@ -171,8 +174,7 @@ class AIExtractor:
                 prompt_parts.append(f"\nSECTION TABLES:\n{''.join(section_tables_parts)}")
             if context_text:
                 prompt_parts.append(f"\nREFERENCE CONTEXT (definitions, footnotes, glossary):\n{context_text}")
-            if exchange_hints:
-                prompt_parts.append(f"\n{exchange_hints}")
+            prompt_parts.insert(0, exchange_prompt)
 
             prompt = "\n".join(prompt_parts)
 
@@ -189,12 +191,24 @@ class AIExtractor:
                     pass
 
             start_time = time.time()
-            result = await section_extractor_agent.run(
-                prompt,
-                deps=deps,
-                model=extraction_model,
-                model_settings=ModelSettings(max_tokens=16384),
-            )
+            for attempt in range(AI_CALL_MAX_RETRIES):
+                try:
+                    result = await section_extractor_agent.run(
+                        prompt,
+                        deps=deps,
+                        model=extraction_model,
+                        model_settings=extraction_model_settings,
+                    )
+                    break
+                except UnexpectedModelBehavior as e:
+                    if attempt < AI_CALL_MAX_RETRIES - 1:
+                        logger.warning(
+                            f"[{exchange_code}] Transient model error on group {gi} "
+                            f"(attempt {attempt + 1}/{AI_CALL_MAX_RETRIES}): {e}"
+                        )
+                        await asyncio.sleep(AI_CALL_RETRY_DELAY)
+                    else:
+                        raise
             elapsed_ms = int((time.time() - start_time) * 1000)
 
             cost = cost_tracker.record(
@@ -277,8 +291,6 @@ class AIExtractor:
         """Run fee validation agent and return confidence score."""
         import json
 
-        from pydantic_ai.settings import ModelSettings
-
         from exnot.ai.agents.fee_validator import fee_validator_agent
         from exnot.ai.models import TaskType
 
@@ -290,6 +302,7 @@ class AIExtractor:
 
         model = deps.model_registry.get_model(TaskType.FEE_VALIDATION)
         model_name = deps.model_registry.get_model_name(TaskType.FEE_VALIDATION)
+        validation_settings = deps.model_registry.get_model_settings(TaskType.FEE_VALIDATION, max_tokens=8192)
         event_emitter = deps.event_emitter
 
         # Emit AI_CALL_START for validation
@@ -310,7 +323,7 @@ class AIExtractor:
                 prompt,
                 deps=deps,
                 model=model,
-                model_settings=ModelSettings(max_tokens=8192),
+                model_settings=validation_settings,
             )
             elapsed_ms = int((time.time() - start_time) * 1000)
 

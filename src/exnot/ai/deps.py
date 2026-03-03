@@ -21,7 +21,7 @@ class ExtractionDeps:
     model_registry: ModelRegistry
     cost_tracker: CostTracker
     exchange_code: str
-    exchange_hints: str = ""
+    exchange_prompt: str = ""
     document: ExtractedDocument = field(default_factory=lambda: ExtractedDocument(full_text="", tables=[]))
     # Pre-computed sections and groups (set by AIExtractor before orchestrator runs)
     sections: list[DocumentSection] = field(default_factory=list)
