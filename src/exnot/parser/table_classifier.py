@@ -1,4 +1,5 @@
 """Classify parsed tables as fee-relevant or non-fee."""
+
 import re
 from dataclasses import dataclass
 
@@ -6,16 +7,34 @@ from exnot.parser.base import ExtractedTable
 
 # Headers that indicate per-contract fee tables
 FEE_INDICATORS = [
-    "maker", "taker", "rebate", "per contract", "fee per",
-    "customer", "professional", "market maker", "broker",
-    "penny", "non-penny", "account type", "contra",
+    "maker",
+    "taker",
+    "rebate",
+    "per contract",
+    "fee per",
+    "customer",
+    "professional",
+    "market maker",
+    "broker",
+    "penny",
+    "non-penny",
+    "account type",
+    "contra",
 ]
 
 # Headers that indicate non-fee tables (connectivity, membership, etc.)
 NON_FEE_INDICATORS = [
-    "port", "connection", "subscription", "permit",
-    "membership", "market data", "monthly fee", "per month",
-    "per port", "report", "card submission",
+    "port",
+    "connection",
+    "subscription",
+    "permit",
+    "membership",
+    "market data",
+    "monthly fee",
+    "per month",
+    "per port",
+    "report",
+    "card submission",
 ]
 
 # Dollar amounts in cells: $0.50, ($0.20), -$0.05
@@ -68,9 +87,7 @@ def classify_table(table: ExtractedTable, table_index: int = 0) -> TableClassifi
         reasons.append("-title_page")
 
     # Very few rows with "per month" in cells → non-fee
-    all_cells_text = " ".join(
-        str(cell).lower() for row in table.rows[:5] for cell in row
-    )
+    all_cells_text = " ".join(str(cell).lower() for row in table.rows[:5] for cell in row)
     if "per month" in all_cells_text or "per port" in all_cells_text:
         score -= 2
         reasons.append("-monthly_flat")

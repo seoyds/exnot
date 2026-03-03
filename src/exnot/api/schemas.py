@@ -147,8 +147,12 @@ class FeeChangeResponse(BaseModel):
             security_class=change.security_class.value if change.security_class else None,
             order_type=change.order_type.value if change.order_type else None,
             fee_type=change.fee_type.value if change.fee_type else None,
-            old_amount=Decimal(change.old_amount_cents) / Decimal(10000) if change.old_amount_cents is not None else None,
-            new_amount=Decimal(change.new_amount_cents) / Decimal(10000) if change.new_amount_cents is not None else None,
+            old_amount=Decimal(change.old_amount_cents) / Decimal(10000)
+            if change.old_amount_cents is not None
+            else None,
+            new_amount=Decimal(change.new_amount_cents) / Decimal(10000)
+            if change.new_amount_cents is not None
+            else None,
             change_description=change.change_description,
             detected_at=change.detected_at,
         )

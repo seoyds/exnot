@@ -59,13 +59,17 @@ class TestRenderHtmlText:
         """Rendered text should exclude hidden content that get_text() includes."""
         from exnot.parser.html_parser import HtmlParser
 
-        html = b"""
+        html = (
+            b"""
         <html><body>
-        <div style="display:none">""" + b"HIDDEN " * 500 + b"""</div>
+        <div style="display:none">"""
+            + b"HIDDEN " * 500
+            + b"""</div>
         <h1>Visible Fee Schedule</h1>
         <p>Only this should appear.</p>
         </body></html>
         """
+        )
         parser = HtmlParser()
 
         doc_raw = parser.extract(html)

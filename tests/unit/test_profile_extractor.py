@@ -1,4 +1,5 @@
 """Tests for rules-based profile extraction."""
+
 from exnot.parser.base import ExtractedTable
 from exnot.profiles.extractor import extract_from_mapping, parse_amount
 

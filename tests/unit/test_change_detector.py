@@ -1,6 +1,5 @@
 """Tests for the change detection engine."""
 
-
 from exnot.differ.detector import ChangeDetector
 
 
@@ -30,9 +29,7 @@ class TestChangeDetector:
 
     def test_modified_fees(self, sample_schedule, sample_schedule_updated):
         """Should detect modified fee amounts."""
-        report = self.detector.detect(
-            sample_schedule, sample_schedule_updated, old_version=1, new_version=2
-        )
+        report = self.detector.detect(sample_schedule, sample_schedule_updated, old_version=1, new_version=2)
 
         assert report.has_changes
         modified = [c for c in report.changes if c.change_type == "MODIFIED"]
@@ -49,9 +46,7 @@ class TestChangeDetector:
 
     def test_new_fees(self, sample_schedule, sample_schedule_updated):
         """Should detect newly added fees."""
-        report = self.detector.detect(
-            sample_schedule, sample_schedule_updated, old_version=1, new_version=2
-        )
+        report = self.detector.detect(sample_schedule, sample_schedule_updated, old_version=1, new_version=2)
 
         new_fees = [c for c in report.changes if c.change_type == "NEW"]
         assert len(new_fees) == 1
@@ -60,18 +55,14 @@ class TestChangeDetector:
 
     def test_removed_fees(self, sample_schedule, sample_schedule_updated):
         """The updated schedule doesn't remove any fees in our fixture, verify 0 removed."""
-        report = self.detector.detect(
-            sample_schedule, sample_schedule_updated, old_version=1, new_version=2
-        )
+        report = self.detector.detect(sample_schedule, sample_schedule_updated, old_version=1, new_version=2)
 
         removed = [c for c in report.changes if c.change_type == "REMOVED"]
         assert len(removed) == 0
 
     def test_summary_format(self, sample_schedule, sample_schedule_updated):
         """Summary should list counts of each change type."""
-        report = self.detector.detect(
-            sample_schedule, sample_schedule_updated, old_version=1, new_version=2
-        )
+        report = self.detector.detect(sample_schedule, sample_schedule_updated, old_version=1, new_version=2)
 
         assert "modified" in report.summary
         assert "new" in report.summary

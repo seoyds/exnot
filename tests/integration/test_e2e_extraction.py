@@ -7,8 +7,6 @@ with all external services mocked at the boundary.
 from decimal import Decimal
 from unittest.mock import patch
 
-import pytest
-
 from exnot.differ.detector import ChangeDetector
 from exnot.normalizer.engine import NormalizationEngine
 from exnot.normalizer.schema import (
@@ -76,94 +74,262 @@ NASDAQ_ISE_HTML = b"""\
 MOCK_EXTRACTION_RESULT = ExtractionResult(
     raw_fees=[
         # Penny — Maker
-        {"participant_type": "CUSTOMER", "security_class": "PENNY", "order_type": "SIMPLE",
-         "fee_type": "MAKER", "amount": -0.25, "is_rebate": True,
-         "section_ref": "Regular Order Transaction Fees - Select Symbols"},
-        {"participant_type": "PROFESSIONAL", "security_class": "PENNY", "order_type": "SIMPLE",
-         "fee_type": "MAKER", "amount": 0.20, "is_rebate": False,
-         "section_ref": "Regular Order Transaction Fees - Select Symbols"},
-        {"participant_type": "MARKET_MAKER", "security_class": "PENNY", "order_type": "SIMPLE",
-         "fee_type": "MAKER", "amount": -0.15, "is_rebate": True,
-         "section_ref": "Regular Order Transaction Fees - Select Symbols"},
-        {"participant_type": "AWAY_MARKET_MAKER", "security_class": "PENNY", "order_type": "SIMPLE",
-         "fee_type": "MAKER", "amount": 0.30, "is_rebate": False,
-         "section_ref": "Regular Order Transaction Fees - Select Symbols"},
-        {"participant_type": "FIRM", "security_class": "PENNY", "order_type": "SIMPLE",
-         "fee_type": "MAKER", "amount": 0.20, "is_rebate": False,
-         "section_ref": "Regular Order Transaction Fees - Select Symbols"},
-        {"participant_type": "BROKER_DEALER", "security_class": "PENNY", "order_type": "SIMPLE",
-         "fee_type": "MAKER", "amount": 0.20, "is_rebate": False,
-         "section_ref": "Regular Order Transaction Fees - Select Symbols"},
+        {
+            "participant_type": "CUSTOMER",
+            "security_class": "PENNY",
+            "order_type": "SIMPLE",
+            "fee_type": "MAKER",
+            "amount": -0.25,
+            "is_rebate": True,
+            "section_ref": "Regular Order Transaction Fees - Select Symbols",
+        },
+        {
+            "participant_type": "PROFESSIONAL",
+            "security_class": "PENNY",
+            "order_type": "SIMPLE",
+            "fee_type": "MAKER",
+            "amount": 0.20,
+            "is_rebate": False,
+            "section_ref": "Regular Order Transaction Fees - Select Symbols",
+        },
+        {
+            "participant_type": "MARKET_MAKER",
+            "security_class": "PENNY",
+            "order_type": "SIMPLE",
+            "fee_type": "MAKER",
+            "amount": -0.15,
+            "is_rebate": True,
+            "section_ref": "Regular Order Transaction Fees - Select Symbols",
+        },
+        {
+            "participant_type": "AWAY_MARKET_MAKER",
+            "security_class": "PENNY",
+            "order_type": "SIMPLE",
+            "fee_type": "MAKER",
+            "amount": 0.30,
+            "is_rebate": False,
+            "section_ref": "Regular Order Transaction Fees - Select Symbols",
+        },
+        {
+            "participant_type": "FIRM",
+            "security_class": "PENNY",
+            "order_type": "SIMPLE",
+            "fee_type": "MAKER",
+            "amount": 0.20,
+            "is_rebate": False,
+            "section_ref": "Regular Order Transaction Fees - Select Symbols",
+        },
+        {
+            "participant_type": "BROKER_DEALER",
+            "security_class": "PENNY",
+            "order_type": "SIMPLE",
+            "fee_type": "MAKER",
+            "amount": 0.20,
+            "is_rebate": False,
+            "section_ref": "Regular Order Transaction Fees - Select Symbols",
+        },
         # Penny — Taker
-        {"participant_type": "CUSTOMER", "security_class": "PENNY", "order_type": "SIMPLE",
-         "fee_type": "TAKER", "amount": 0.50, "is_rebate": False,
-         "section_ref": "Regular Order Transaction Fees - Select Symbols"},
-        {"participant_type": "PROFESSIONAL", "security_class": "PENNY", "order_type": "SIMPLE",
-         "fee_type": "TAKER", "amount": 0.50, "is_rebate": False,
-         "section_ref": "Regular Order Transaction Fees - Select Symbols"},
-        {"participant_type": "MARKET_MAKER", "security_class": "PENNY", "order_type": "SIMPLE",
-         "fee_type": "TAKER", "amount": 0.47, "is_rebate": False,
-         "section_ref": "Regular Order Transaction Fees - Select Symbols"},
-        {"participant_type": "AWAY_MARKET_MAKER", "security_class": "PENNY", "order_type": "SIMPLE",
-         "fee_type": "TAKER", "amount": 0.50, "is_rebate": False,
-         "section_ref": "Regular Order Transaction Fees - Select Symbols"},
-        {"participant_type": "FIRM", "security_class": "PENNY", "order_type": "SIMPLE",
-         "fee_type": "TAKER", "amount": 0.50, "is_rebate": False,
-         "section_ref": "Regular Order Transaction Fees - Select Symbols"},
-        {"participant_type": "BROKER_DEALER", "security_class": "PENNY", "order_type": "SIMPLE",
-         "fee_type": "TAKER", "amount": 0.50, "is_rebate": False,
-         "section_ref": "Regular Order Transaction Fees - Select Symbols"},
+        {
+            "participant_type": "CUSTOMER",
+            "security_class": "PENNY",
+            "order_type": "SIMPLE",
+            "fee_type": "TAKER",
+            "amount": 0.50,
+            "is_rebate": False,
+            "section_ref": "Regular Order Transaction Fees - Select Symbols",
+        },
+        {
+            "participant_type": "PROFESSIONAL",
+            "security_class": "PENNY",
+            "order_type": "SIMPLE",
+            "fee_type": "TAKER",
+            "amount": 0.50,
+            "is_rebate": False,
+            "section_ref": "Regular Order Transaction Fees - Select Symbols",
+        },
+        {
+            "participant_type": "MARKET_MAKER",
+            "security_class": "PENNY",
+            "order_type": "SIMPLE",
+            "fee_type": "TAKER",
+            "amount": 0.47,
+            "is_rebate": False,
+            "section_ref": "Regular Order Transaction Fees - Select Symbols",
+        },
+        {
+            "participant_type": "AWAY_MARKET_MAKER",
+            "security_class": "PENNY",
+            "order_type": "SIMPLE",
+            "fee_type": "TAKER",
+            "amount": 0.50,
+            "is_rebate": False,
+            "section_ref": "Regular Order Transaction Fees - Select Symbols",
+        },
+        {
+            "participant_type": "FIRM",
+            "security_class": "PENNY",
+            "order_type": "SIMPLE",
+            "fee_type": "TAKER",
+            "amount": 0.50,
+            "is_rebate": False,
+            "section_ref": "Regular Order Transaction Fees - Select Symbols",
+        },
+        {
+            "participant_type": "BROKER_DEALER",
+            "security_class": "PENNY",
+            "order_type": "SIMPLE",
+            "fee_type": "TAKER",
+            "amount": 0.50,
+            "is_rebate": False,
+            "section_ref": "Regular Order Transaction Fees - Select Symbols",
+        },
         # Non-Penny — Maker
-        {"participant_type": "CUSTOMER", "security_class": "NON_PENNY", "order_type": "SIMPLE",
-         "fee_type": "MAKER", "amount": -0.42, "is_rebate": True,
-         "section_ref": "Regular Order Transaction Fees - Non-Select Symbols"},
-        {"participant_type": "PROFESSIONAL", "security_class": "NON_PENNY", "order_type": "SIMPLE",
-         "fee_type": "MAKER", "amount": 0.25, "is_rebate": False,
-         "section_ref": "Regular Order Transaction Fees - Non-Select Symbols"},
-        {"participant_type": "MARKET_MAKER", "security_class": "NON_PENNY", "order_type": "SIMPLE",
-         "fee_type": "MAKER", "amount": -0.10, "is_rebate": True,
-         "section_ref": "Regular Order Transaction Fees - Non-Select Symbols"},
-        {"participant_type": "FIRM", "security_class": "NON_PENNY", "order_type": "SIMPLE",
-         "fee_type": "MAKER", "amount": 0.25, "is_rebate": False,
-         "section_ref": "Regular Order Transaction Fees - Non-Select Symbols"},
-        {"participant_type": "BROKER_DEALER", "security_class": "NON_PENNY", "order_type": "SIMPLE",
-         "fee_type": "MAKER", "amount": 0.25, "is_rebate": False,
-         "section_ref": "Regular Order Transaction Fees - Non-Select Symbols"},
+        {
+            "participant_type": "CUSTOMER",
+            "security_class": "NON_PENNY",
+            "order_type": "SIMPLE",
+            "fee_type": "MAKER",
+            "amount": -0.42,
+            "is_rebate": True,
+            "section_ref": "Regular Order Transaction Fees - Non-Select Symbols",
+        },
+        {
+            "participant_type": "PROFESSIONAL",
+            "security_class": "NON_PENNY",
+            "order_type": "SIMPLE",
+            "fee_type": "MAKER",
+            "amount": 0.25,
+            "is_rebate": False,
+            "section_ref": "Regular Order Transaction Fees - Non-Select Symbols",
+        },
+        {
+            "participant_type": "MARKET_MAKER",
+            "security_class": "NON_PENNY",
+            "order_type": "SIMPLE",
+            "fee_type": "MAKER",
+            "amount": -0.10,
+            "is_rebate": True,
+            "section_ref": "Regular Order Transaction Fees - Non-Select Symbols",
+        },
+        {
+            "participant_type": "FIRM",
+            "security_class": "NON_PENNY",
+            "order_type": "SIMPLE",
+            "fee_type": "MAKER",
+            "amount": 0.25,
+            "is_rebate": False,
+            "section_ref": "Regular Order Transaction Fees - Non-Select Symbols",
+        },
+        {
+            "participant_type": "BROKER_DEALER",
+            "security_class": "NON_PENNY",
+            "order_type": "SIMPLE",
+            "fee_type": "MAKER",
+            "amount": 0.25,
+            "is_rebate": False,
+            "section_ref": "Regular Order Transaction Fees - Non-Select Symbols",
+        },
         # Non-Penny — Taker
-        {"participant_type": "CUSTOMER", "security_class": "NON_PENNY", "order_type": "SIMPLE",
-         "fee_type": "TAKER", "amount": 0.85, "is_rebate": False,
-         "section_ref": "Regular Order Transaction Fees - Non-Select Symbols"},
-        {"participant_type": "PROFESSIONAL", "security_class": "NON_PENNY", "order_type": "SIMPLE",
-         "fee_type": "TAKER", "amount": 0.85, "is_rebate": False,
-         "section_ref": "Regular Order Transaction Fees - Non-Select Symbols"},
-        {"participant_type": "MARKET_MAKER", "security_class": "NON_PENNY", "order_type": "SIMPLE",
-         "fee_type": "TAKER", "amount": 0.82, "is_rebate": False,
-         "section_ref": "Regular Order Transaction Fees - Non-Select Symbols"},
-        {"participant_type": "FIRM", "security_class": "NON_PENNY", "order_type": "SIMPLE",
-         "fee_type": "TAKER", "amount": 0.85, "is_rebate": False,
-         "section_ref": "Regular Order Transaction Fees - Non-Select Symbols"},
-        {"participant_type": "BROKER_DEALER", "security_class": "NON_PENNY", "order_type": "SIMPLE",
-         "fee_type": "TAKER", "amount": 0.85, "is_rebate": False,
-         "section_ref": "Regular Order Transaction Fees - Non-Select Symbols"},
+        {
+            "participant_type": "CUSTOMER",
+            "security_class": "NON_PENNY",
+            "order_type": "SIMPLE",
+            "fee_type": "TAKER",
+            "amount": 0.85,
+            "is_rebate": False,
+            "section_ref": "Regular Order Transaction Fees - Non-Select Symbols",
+        },
+        {
+            "participant_type": "PROFESSIONAL",
+            "security_class": "NON_PENNY",
+            "order_type": "SIMPLE",
+            "fee_type": "TAKER",
+            "amount": 0.85,
+            "is_rebate": False,
+            "section_ref": "Regular Order Transaction Fees - Non-Select Symbols",
+        },
+        {
+            "participant_type": "MARKET_MAKER",
+            "security_class": "NON_PENNY",
+            "order_type": "SIMPLE",
+            "fee_type": "TAKER",
+            "amount": 0.82,
+            "is_rebate": False,
+            "section_ref": "Regular Order Transaction Fees - Non-Select Symbols",
+        },
+        {
+            "participant_type": "FIRM",
+            "security_class": "NON_PENNY",
+            "order_type": "SIMPLE",
+            "fee_type": "TAKER",
+            "amount": 0.85,
+            "is_rebate": False,
+            "section_ref": "Regular Order Transaction Fees - Non-Select Symbols",
+        },
+        {
+            "participant_type": "BROKER_DEALER",
+            "security_class": "NON_PENNY",
+            "order_type": "SIMPLE",
+            "fee_type": "TAKER",
+            "amount": 0.85,
+            "is_rebate": False,
+            "section_ref": "Regular Order Transaction Fees - Non-Select Symbols",
+        },
         # Complex
-        {"participant_type": "CUSTOMER", "security_class": "PENNY", "order_type": "COMPLEX",
-         "fee_type": "MAKER", "amount": 0.00, "is_rebate": False,
-         "section_ref": "Complex Order Fees"},
-        {"participant_type": "CUSTOMER", "security_class": "PENNY", "order_type": "COMPLEX",
-         "fee_type": "TAKER", "amount": 0.00, "is_rebate": False,
-         "section_ref": "Complex Order Fees"},
-        {"participant_type": "PROFESSIONAL", "security_class": "PENNY", "order_type": "COMPLEX",
-         "fee_type": "MAKER", "amount": 0.20, "is_rebate": False,
-         "section_ref": "Complex Order Fees"},
-        {"participant_type": "PROFESSIONAL", "security_class": "PENNY", "order_type": "COMPLEX",
-         "fee_type": "TAKER", "amount": 0.50, "is_rebate": False,
-         "section_ref": "Complex Order Fees"},
-        {"participant_type": "MARKET_MAKER", "security_class": "PENNY", "order_type": "COMPLEX",
-         "fee_type": "MAKER", "amount": 0.20, "is_rebate": False,
-         "section_ref": "Complex Order Fees"},
-        {"participant_type": "MARKET_MAKER", "security_class": "PENNY", "order_type": "COMPLEX",
-         "fee_type": "TAKER", "amount": 0.50, "is_rebate": False,
-         "section_ref": "Complex Order Fees"},
+        {
+            "participant_type": "CUSTOMER",
+            "security_class": "PENNY",
+            "order_type": "COMPLEX",
+            "fee_type": "MAKER",
+            "amount": 0.00,
+            "is_rebate": False,
+            "section_ref": "Complex Order Fees",
+        },
+        {
+            "participant_type": "CUSTOMER",
+            "security_class": "PENNY",
+            "order_type": "COMPLEX",
+            "fee_type": "TAKER",
+            "amount": 0.00,
+            "is_rebate": False,
+            "section_ref": "Complex Order Fees",
+        },
+        {
+            "participant_type": "PROFESSIONAL",
+            "security_class": "PENNY",
+            "order_type": "COMPLEX",
+            "fee_type": "MAKER",
+            "amount": 0.20,
+            "is_rebate": False,
+            "section_ref": "Complex Order Fees",
+        },
+        {
+            "participant_type": "PROFESSIONAL",
+            "security_class": "PENNY",
+            "order_type": "COMPLEX",
+            "fee_type": "TAKER",
+            "amount": 0.50,
+            "is_rebate": False,
+            "section_ref": "Complex Order Fees",
+        },
+        {
+            "participant_type": "MARKET_MAKER",
+            "security_class": "PENNY",
+            "order_type": "COMPLEX",
+            "fee_type": "MAKER",
+            "amount": 0.20,
+            "is_rebate": False,
+            "section_ref": "Complex Order Fees",
+        },
+        {
+            "participant_type": "MARKET_MAKER",
+            "security_class": "PENNY",
+            "order_type": "COMPLEX",
+            "fee_type": "TAKER",
+            "amount": 0.50,
+            "is_rebate": False,
+            "section_ref": "Complex Order Fees",
+        },
     ],
     exchange_name="Nasdaq ISE",
     effective_date="February 1, 2026",
@@ -179,6 +345,7 @@ EXCHANGE_CODE = "NASDAQ_ISE"
 # ---------------------------------------------------------------------------
 # Step 1: HTML Parsing
 # ---------------------------------------------------------------------------
+
 
 class TestHtmlParsing:
     """Verify HtmlParser extracts tables and text from the NASDAQ ISE fixture."""
@@ -221,6 +388,7 @@ class TestHtmlParsing:
 # Step 2: AI Extraction (mocked)
 # ---------------------------------------------------------------------------
 
+
 class TestAIExtraction:
     """Verify the mock extraction result has the expected shape."""
 
@@ -255,6 +423,7 @@ class TestAIExtraction:
 # Step 3: Normalization
 # ---------------------------------------------------------------------------
 
+
 class TestNormalization:
     """Verify NormalizationEngine produces a correct NormalizedFeeSchedule."""
 
@@ -270,6 +439,7 @@ class TestNormalization:
 
     def test_effective_date(self):
         from datetime import date
+
         assert self.schedule.effective_date == date(2026, 2, 1)
 
     def test_all_fees_normalized(self):
@@ -355,6 +525,7 @@ class TestNormalization:
 # Step 4: Change Detection
 # ---------------------------------------------------------------------------
 
+
 class TestChangeDetection:
     """Verify ChangeDetector correctly identifies changes."""
 
@@ -421,11 +592,19 @@ class TestChangeDetection:
     def test_new_fee_detected(self):
         """Adding a new fee should produce a NEW entry."""
         added_fees = list(MOCK_EXTRACTION_RESULT.raw_fees) + [
-            {"participant_type": "CUSTOMER", "security_class": "PENNY", "order_type": "SIMPLE",
-             "fee_type": "ROUTING", "amount": 0.15, "is_rebate": False},
+            {
+                "participant_type": "CUSTOMER",
+                "security_class": "PENNY",
+                "order_type": "SIMPLE",
+                "fee_type": "ROUTING",
+                "amount": 0.15,
+                "is_rebate": False,
+            },
         ]
         added_extraction = ExtractionResult(
-            raw_fees=added_fees, exchange_name="Nasdaq ISE", confidence=0.92,
+            raw_fees=added_fees,
+            exchange_name="Nasdaq ISE",
+            confidence=0.92,
         )
         engine = NormalizationEngine()
         added_schedule = engine.normalize(added_extraction, EXCHANGE_CODE)
@@ -445,7 +624,9 @@ class TestChangeDetection:
         # Remove the last fee (MM/COMPLEX/TAKER)
         fewer_fees = MOCK_EXTRACTION_RESULT.raw_fees[:-1]
         fewer_extraction = ExtractionResult(
-            raw_fees=fewer_fees, exchange_name="Nasdaq ISE", confidence=0.92,
+            raw_fees=fewer_fees,
+            exchange_name="Nasdaq ISE",
+            confidence=0.92,
         )
         engine = NormalizationEngine()
         fewer_schedule = engine.normalize(fewer_extraction, EXCHANGE_CODE)
@@ -462,6 +643,7 @@ class TestChangeDetection:
 # ---------------------------------------------------------------------------
 # Step 5: Full Pipeline Integration (all steps chained)
 # ---------------------------------------------------------------------------
+
 
 class TestFullPipelineIntegration:
     """Chain all steps together: Parse → Extract (mock) → Normalize → Diff."""
@@ -535,5 +717,5 @@ class TestFullPipelineIntegration:
 
         change = report.changes[0]
         assert change.change_type == "MODIFIED"
-        assert change.old_amount_cents == 5000   # $0.50
-        assert change.new_amount_cents == 5300   # $0.53
+        assert change.old_amount_cents == 5000  # $0.50
+        assert change.new_amount_cents == 5300  # $0.53

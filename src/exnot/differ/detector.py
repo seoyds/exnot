@@ -178,7 +178,5 @@ class ChangeDetector:
         else:
             report.summary = "No fee changes detected."
 
-        logger.info(
-            f"[{new_schedule.exchange_code}] Change detection: {report.summary}"
-        )
+        logger.info(f"[{new_schedule.exchange_code}] Change detection: {report.summary}")
         return report

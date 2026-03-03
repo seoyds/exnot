@@ -117,6 +117,7 @@ class LiquidityRole(str, Enum):
 
 class TierConditionCriterion(BaseModel):
     """A single criterion within a tier condition."""
+
     metric: str = Field(description="ADAV, ADRV, ADV, NBBO_PCT, TOTAL_VOLUME, CCV_PCT, CROSS_ASSET")
     capacities: list[str] | None = Field(default=None, description="Participant types counted")
     security_filter: str | None = None
@@ -128,6 +129,7 @@ class TierConditionCriterion(BaseModel):
 
 class TierCondition(BaseModel):
     """Structured tier condition with AND/OR logic."""
+
     logic: str = Field(default="AND", description="AND or OR")
     criteria: list[TierConditionCriterion] = Field(default_factory=list)
 

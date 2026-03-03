@@ -362,9 +362,7 @@ async def validate_orchestrator_output(
         )
 
     if "MAKER" not in fee_types and "TAKER" not in fee_types and len(accumulated) > 5:
-        issues.append(
-            "Missing both MAKER and TAKER fees — most exchanges have maker/taker pricing."
-        )
+        issues.append("Missing both MAKER and TAKER fees — most exchanges have maker/taker pricing.")
 
     if issues:
         raise ModelRetry(

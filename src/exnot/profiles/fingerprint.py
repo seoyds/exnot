@@ -1,4 +1,5 @@
 """Table fingerprinting for change detection."""
+
 import hashlib
 import re
 from dataclasses import dataclass, field

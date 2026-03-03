@@ -135,8 +135,7 @@ def discover_all_exchange_urls(force: bool = False):
 @celery_app.task(
     name="exnot.workers.tasks.scrape_and_process_exchange",
     bind=True,
-    max_retries=3,
-    default_retry_delay=60,
+    max_retries=0,
 )
 def scrape_and_process_exchange(self, exchange_code: str):
     """Full scrape-parse-normalize-diff pipeline for a single exchange.
@@ -188,7 +187,7 @@ def scrape_and_process_exchange(self, exchange_code: str):
         except Exception:
             logger.exception(f"[{exchange_code}] Failed to record error scrape log")
 
-        raise self.retry(exc=exc)
+        raise
     finally:
         session.close()
         try:

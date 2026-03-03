@@ -1,4 +1,5 @@
 """Tests for ExchangeProfileRepository (import-only, no DB)."""
+
 from exnot.db.repositories import ExchangeProfileRepository
 
 

@@ -127,7 +127,7 @@ class AIExtractor:
         context_text = self._build_context_text(context_sections)
 
         # Extract from each group directly (no orchestrator needed)
-        MAX_TABLE_ROWS = 50
+        max_table_rows = 50
         extraction_model = registry.get_model(TaskType.FEE_EXTRACTION)
         extraction_model_name = registry.get_model_name(TaskType.FEE_EXTRACTION)
         extraction_model_settings = registry.get_model_settings(TaskType.FEE_EXTRACTION, max_tokens=16384)
@@ -161,9 +161,9 @@ class AIExtractor:
                             continue
                         section_tables_parts.append(f"\n--- Table: {table.title} ---")
                         section_tables_parts.append(f"Headers: {table.headers}")
-                        for row in table.rows[:MAX_TABLE_ROWS]:
+                        for row in table.rows[:max_table_rows]:
                             section_tables_parts.append(f"  {row}")
-                        if len(table.rows) > MAX_TABLE_ROWS:
+                        if len(table.rows) > max_table_rows:
                             section_tables_parts.append(f"  ... ({len(table.rows)} rows total)")
                         if table.footnotes:
                             section_tables_parts.append(f"Footnotes: {table.footnotes}")

@@ -32,12 +32,10 @@ class SearchResponse:
 
 class SearchProvider(ABC):
     @abstractmethod
-    async def search(self, query: str, num_results: int = 10) -> SearchResponse:
-        ...
+    async def search(self, query: str, num_results: int = 10) -> SearchResponse: ...
 
     @abstractmethod
-    async def close(self):
-        ...
+    async def close(self): ...
 
 
 class SerpApiProvider(SearchProvider):

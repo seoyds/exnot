@@ -87,7 +87,7 @@ class CsvParser(AbstractParser):
             header_idx = 1
 
         headers = rows_data[header_idx]
-        data_rows = rows_data[header_idx + 1:]
+        data_rows = rows_data[header_idx + 1 :]
 
         if not data_rows:
             return None

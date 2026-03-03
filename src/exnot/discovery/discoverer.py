@@ -50,9 +50,7 @@ class UrlDiscoverer:
         self.max_candidates = settings.discovery_max_candidates
         self.fetch_timeout = settings.discovery_fetch_timeout
 
-    async def discover(
-        self, exchange_code: str, exchange_name: str, operator: str
-    ) -> DiscoveryResult:
+    async def discover(self, exchange_code: str, exchange_name: str, operator: str) -> DiscoveryResult:
         """Run the full discovery pipeline for one exchange."""
         result = DiscoveryResult(exchange_code=exchange_code, exchange_name=exchange_name)
 
@@ -90,9 +88,7 @@ class UrlDiscoverer:
 
         # Step 2: Probe each candidate URL
         candidates = await self._probe_candidates(unique_results)
-        result.all_candidates = [
-            {"url": c.url, "title": c.title, "content_type": c.content_type} for c in candidates
-        ]
+        result.all_candidates = [{"url": c.url, "title": c.title, "content_type": c.content_type} for c in candidates]
 
         # Step 3: Use AI agent to evaluate candidates
         evaluation = await self._evaluate_with_ai(candidates, exchange_code, exchange_name, operator)

@@ -190,9 +190,14 @@ class TestNormalizationEngine:
                     "tier_conditions": {
                         "logic": "OR",
                         "criteria": [
-                            {"metric": "ADV", "operator": ">=", "value": 0.01,
-                             "unit": "PCT_OCV", "description": "ADV >= 1.00% OCV"}
-                        ]
+                            {
+                                "metric": "ADV",
+                                "operator": ">=",
+                                "value": 0.01,
+                                "unit": "PCT_OCV",
+                                "description": "ADV >= 1.00% OCV",
+                            }
+                        ],
                     },
                     "section_ref": "Transaction Fees, Footnote 1",
                 },
@@ -255,34 +260,40 @@ class TestNormalizationEngine:
 class TestV3SchemaEnums:
     def test_exec_venue_enum_exists(self):
         from exnot.normalizer.schema import ExecVenue
+
         assert ExecVenue.ELECTRONIC == "ELECTRONIC"
         assert ExecVenue.FLOOR == "FLOOR"
         assert ExecVenue.ROUTED == "ROUTED"
 
     def test_liquidity_role_enum_exists(self):
         from exnot.normalizer.schema import LiquidityRole
+
         assert LiquidityRole.MAKER == "MAKER"
         assert LiquidityRole.TAKER == "TAKER"
         assert LiquidityRole.NONE == "NONE"
 
     def test_product_type_enum_exists(self):
         from exnot.normalizer.schema import ProductType
+
         assert ProductType.SIMPLE == "SIMPLE"
         assert ProductType.COMPLEX == "COMPLEX"
 
     def test_listing_type_enum_exists(self):
         from exnot.normalizer.schema import ListingType
+
         assert ListingType.EQUITY == "EQUITY"
         assert ListingType.ETF == "ETF"
         assert ListingType.INDEX == "INDEX"
 
     def test_penny_class_enum_exists(self):
         from exnot.normalizer.schema import PennyClass
+
         assert PennyClass.PENNY == "PENNY"
         assert PennyClass.NON_PENNY == "NON_PENNY"
 
     def test_origin_code_enum_exists(self):
         from exnot.normalizer.schema import OriginCode
+
         assert OriginCode.CUSTOMER == "CUSTOMER"
         assert OriginCode.PROFESSIONAL == "PROFESSIONAL"
         assert OriginCode.FIRM == "FIRM"

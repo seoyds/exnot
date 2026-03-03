@@ -32,9 +32,7 @@ def test_docling_import_error_falls_back(caplog):
     original_import = __builtins__.__import__ if hasattr(__builtins__, "__import__") else __import__
 
     def mock_import(name, *args, **kwargs):
-        if "docling_parser" in name or (
-            "exnot.parser.docling_parser" in name
-        ):
+        if "docling_parser" in name or ("exnot.parser.docling_parser" in name):
             raise ImportError("No module named 'docling'")
         return original_import(name, *args, **kwargs)
 

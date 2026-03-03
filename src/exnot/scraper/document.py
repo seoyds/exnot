@@ -100,9 +100,7 @@ class DocumentCollector:
 
         return CollectionResult(documents=tuple(unique), primary=primary)
 
-    async def _discover_linked_documents(
-        self, exchange: Exchange, html_doc: DocumentResult
-    ) -> list[DocumentResult]:
+    async def _discover_linked_documents(self, exchange: Exchange, html_doc: DocumentResult) -> list[DocumentResult]:
         """Scan an HTML page for PDF and CSV links and fetch them."""
         discovered_urls: list[str] = []
 

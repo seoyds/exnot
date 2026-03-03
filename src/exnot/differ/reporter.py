@@ -30,10 +30,7 @@ class ChangeReporter:
                 if c.change_type == "MODIFIED":
                     old = f"${c.old_amount_cents / 10000:.4f}" if c.old_amount_cents is not None else "N/A"
                     new = f"${c.new_amount_cents / 10000:.4f}" if c.new_amount_cents is not None else "N/A"
-                    lines.append(
-                        f"  {c.participant_type} | {c.security_class} | {c.fee_type}: "
-                        f"{old} → {new}"
-                    )
+                    lines.append(f"  {c.participant_type} | {c.security_class} | {c.fee_type}: {old} → {new}")
             lines.append("")
 
         if report.new_count:
@@ -41,9 +38,7 @@ class ChangeReporter:
             for c in report.changes:
                 if c.change_type == "NEW":
                     amt = f"${c.new_amount_cents / 10000:.4f}" if c.new_amount_cents is not None else "N/A"
-                    lines.append(
-                        f"  {c.participant_type} | {c.security_class} | {c.fee_type}: {amt}"
-                    )
+                    lines.append(f"  {c.participant_type} | {c.security_class} | {c.fee_type}: {amt}")
             lines.append("")
 
         if report.removed_count:
@@ -51,9 +46,7 @@ class ChangeReporter:
             for c in report.changes:
                 if c.change_type == "REMOVED":
                     amt = f"${c.old_amount_cents / 10000:.4f}" if c.old_amount_cents is not None else "N/A"
-                    lines.append(
-                        f"  {c.participant_type} | {c.security_class} | {c.fee_type}: {amt}"
-                    )
+                    lines.append(f"  {c.participant_type} | {c.security_class} | {c.fee_type}: {amt}")
 
         return "\n".join(lines)
 
@@ -88,10 +81,7 @@ class ChangeReporter:
                 indent=2,
             )
 
-            prompt = (
-                f"Summarize these fee schedule changes for {report.exchange_code}.\n\n"
-                f"Changes:\n{changes_json}"
-            )
+            prompt = f"Summarize these fee schedule changes for {report.exchange_code}.\n\nChanges:\n{changes_json}"
 
             registry = ModelRegistry(settings)
             cost_tracker = CostTracker(exchange_code=report.exchange_code, budget_usd=0.50)

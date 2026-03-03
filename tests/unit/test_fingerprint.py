@@ -1,9 +1,10 @@
 """Tests for table fingerprinting."""
+
 from exnot.parser.base import ExtractedTable
 from exnot.profiles.fingerprint import (
-    fingerprint_table,
-    fingerprint_all_tables,
     compare_fingerprints,
+    fingerprint_all_tables,
+    fingerprint_table,
 )
 
 

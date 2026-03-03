@@ -16,11 +16,11 @@ pytestmark = pytest.mark.skipif(not _docling_available, reason="docling not inst
 
 def test_extract_returns_extracted_document():
     """DoclingPdfParser.extract() should return a well-formed ExtractedDocument."""
-    from exnot.parser.base import ExtractedDocument
-    from exnot.parser.docling_parser import DoclingPdfParser
-
     # Minimal valid PDF (single page, no content)
     import fitz
+
+    from exnot.parser.base import ExtractedDocument
+    from exnot.parser.docling_parser import DoclingPdfParser
 
     doc = fitz.open()
     page = doc.new_page()
@@ -41,9 +41,9 @@ def test_extract_returns_extracted_document():
 
 def test_page_markers_present():
     """Page-marked text should contain --- Page N --- markers."""
-    from exnot.parser.docling_parser import DoclingPdfParser
-
     import fitz
+
+    from exnot.parser.docling_parser import DoclingPdfParser
 
     doc = fitz.open()
     for i in range(2):

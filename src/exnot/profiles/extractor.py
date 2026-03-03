@@ -1,4 +1,5 @@
 """Rules-based fee extraction using stored table profiles."""
+
 import logging
 import re
 from decimal import InvalidOperation
@@ -109,25 +110,27 @@ def extract_from_mapping(
                 if amount is None:
                     continue
 
-                fees.append({
-                    "participant_type": participant_info["participant_type"],
-                    "contra_party_type": contra_party,
-                    "security_class": security_class,
-                    "fee_type": col_def["fee_type"],
-                    "order_type": order_type,
-                    "amount": amount,
-                    "is_rebate": amount < 0,
-                    "section_ref": section_ref,
-                    "fee_code": None,
-                    "symbol": None,
-                    "fee_unit": "PER_CONTRACT",
-                    "routing_destination": None,
-                    "tier_group": None,
-                    "tier_number": None,
-                    "tier_conditions": None,
-                    "conditions": None,
-                    "notes": None,
-                })
+                fees.append(
+                    {
+                        "participant_type": participant_info["participant_type"],
+                        "contra_party_type": contra_party,
+                        "security_class": security_class,
+                        "fee_type": col_def["fee_type"],
+                        "order_type": order_type,
+                        "amount": amount,
+                        "is_rebate": amount < 0,
+                        "section_ref": section_ref,
+                        "fee_code": None,
+                        "symbol": None,
+                        "fee_unit": "PER_CONTRACT",
+                        "routing_destination": None,
+                        "tier_group": None,
+                        "tier_number": None,
+                        "tier_conditions": None,
+                        "conditions": None,
+                        "notes": None,
+                    }
+                )
 
     return fees
 

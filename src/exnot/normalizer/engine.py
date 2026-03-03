@@ -197,10 +197,7 @@ class NormalizationEngine:
             extraction_notes=extraction.extraction_notes,
         )
 
-        logger.info(
-            f"Normalized {len(fees)} fees for {exchange_code} "
-            f"(from {len(extraction.raw_fees)} raw entries)"
-        )
+        logger.info(f"Normalized {len(fees)} fees for {exchange_code} (from {len(extraction.raw_fees)} raw entries)")
         return schedule
 
     def _normalize_entry(self, raw: dict, exchange_code: str) -> NormalizedFeeEntry | None:
@@ -458,15 +455,17 @@ class NormalizationEngine:
         try:
             criteria = []
             for c in raw.get("criteria", []):
-                criteria.append(TierConditionCriterion(
-                    metric=c.get("metric", ""),
-                    capacities=c.get("capacities"),
-                    security_filter=c.get("security_filter"),
-                    operator=c.get("operator", ">="),
-                    value=float(c.get("value", 0)),
-                    unit=c.get("unit", ""),
-                    description=c.get("description", ""),
-                ))
+                criteria.append(
+                    TierConditionCriterion(
+                        metric=c.get("metric", ""),
+                        capacities=c.get("capacities"),
+                        security_filter=c.get("security_filter"),
+                        operator=c.get("operator", ">="),
+                        value=float(c.get("value", 0)),
+                        unit=c.get("unit", ""),
+                        description=c.get("description", ""),
+                    )
+                )
             return TierCondition(
                 logic=raw.get("logic", "AND"),
                 criteria=criteria,

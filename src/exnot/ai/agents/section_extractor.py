@@ -6,7 +6,7 @@ This is the core value task — it does the actual fee extraction.
 
 from __future__ import annotations
 
-from pydantic_ai import Agent, ModelRetry, RunContext, ToolOutput
+from pydantic_ai import Agent, RunContext, ToolOutput
 
 from exnot.ai.deps import ExtractionDeps
 from exnot.ai.types import SectionExtractionResult

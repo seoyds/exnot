@@ -1,4 +1,7 @@
-"""LiteLLM model registry with per-task routing via PydanticAI."""
+"""Model registry with per-task routing via PydanticAI.
+
+Supports direct provider APIs (DashScope for Qwen) with OpenRouter as fallback.
+"""
 
 from __future__ import annotations
 
@@ -7,12 +10,15 @@ from enum import Enum
 from functools import lru_cache
 
 from pydantic_ai.models.openai import OpenAIChatModel
-from pydantic_ai.profiles.openai import OpenAIModelProfile
 from pydantic_ai.providers.openai import OpenAIProvider
+from pydantic_ai.providers.openrouter import OpenRouterProvider
+from pydantic_ai.settings import ModelSettings
 
 from exnot.config import Settings, get_settings
 
 logger = logging.getLogger(__name__)
+
+DASHSCOPE_BASE_URL = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
 
 
 class TaskType(str, Enum):
@@ -40,14 +46,23 @@ _TASK_MODEL_ATTRS: dict[TaskType, str] = {
 
 
 class ModelRegistry:
-    """Resolves TaskType -> PydanticAI model instance via OpenRouter."""
+    """Resolves TaskType -> PydanticAI model instance.
+
+    Routes to direct providers when API keys are configured,
+    falls back to OpenRouter otherwise.
+    """
 
     def __init__(self, settings: Settings | None = None):
         self._settings = settings or get_settings()
-        self._provider = OpenAIProvider(
-            base_url=self._settings.openrouter_base_url,
+        self._openrouter_provider = OpenRouterProvider(
             api_key=self._settings.openrouter_api_key,
         )
+        self._dashscope_provider: OpenAIProvider | None = None
+        if self._settings.dashscope_api_key:
+            self._dashscope_provider = OpenAIProvider(
+                base_url=DASHSCOPE_BASE_URL,
+                api_key=self._settings.dashscope_api_key,
+            )
         self._cache: dict[str, OpenAIChatModel] = {}
 
     def get_model_name(self, task: TaskType) -> str:
@@ -61,15 +76,33 @@ class ModelRegistry:
         """Get or create a PydanticAI model instance for the given task."""
         model_name = self.get_model_name(task)
         if model_name not in self._cache:
+            provider, provider_name, api_model_name = self._resolve_provider(model_name)
             self._cache[model_name] = OpenAIChatModel(
-                model_name,
-                provider=self._provider,
-                profile=OpenAIModelProfile(
-                    openai_supports_strict_tool_definition=False,
-                ),
+                api_model_name,
+                provider=provider,
             )
-            logger.debug(f"Created model instance for {task.value}: {model_name}")
+            logger.info(f"Created model for {task.value}: {model_name} via {provider_name}")
         return self._cache[model_name]
+
+    def get_model_settings(self, task: TaskType, **overrides) -> ModelSettings:
+        """Get ModelSettings for a task, with provider-specific defaults."""
+        model_name = self.get_model_name(task)
+        settings: dict = {}
+        # DashScope Qwen models need thinking mode disabled for tool_choice to work
+        if model_name.startswith("qwen/") and self._dashscope_provider:
+            settings["extra_body"] = {"enable_thinking": False}
+        settings.update(overrides)
+        return ModelSettings(**settings)
+
+    def _resolve_provider(self, model_name: str) -> tuple:
+        """Resolve model name to (provider, provider_label, api_model_name)."""
+        # Qwen models → DashScope direct (when API key is set)
+        if model_name.startswith("qwen/") and self._dashscope_provider:
+            api_name = model_name.removeprefix("qwen/")
+            return self._dashscope_provider, "DashScope", api_name
+
+        # Default: OpenRouter
+        return self._openrouter_provider, "OpenRouter", model_name
 
 
 @lru_cache

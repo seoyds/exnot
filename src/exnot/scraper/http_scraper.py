@@ -40,18 +40,18 @@ class HttpScraper(AbstractScraper):
                 last_error = e
                 if e.response.status_code == 429:
                     wait = (2**attempt) * 2
-                    logger.warning(f"Rate limited on {url}, waiting {wait}s (attempt {attempt+1})")
+                    logger.warning(f"Rate limited on {url}, waiting {wait}s (attempt {attempt + 1})")
                     await asyncio.sleep(wait)
                 elif e.response.status_code >= 500:
                     wait = 2**attempt
-                    logger.warning(f"Server error on {url}, retrying in {wait}s (attempt {attempt+1})")
+                    logger.warning(f"Server error on {url}, retrying in {wait}s (attempt {attempt + 1})")
                     await asyncio.sleep(wait)
                 else:
                     raise
             except httpx.RequestError as e:
                 last_error = e
                 wait = 2**attempt
-                logger.warning(f"Request error on {url}: {e}, retrying in {wait}s (attempt {attempt+1})")
+                logger.warning(f"Request error on {url}: {e}, retrying in {wait}s (attempt {attempt + 1})")
                 await asyncio.sleep(wait)
 
         raise last_error  # type: ignore[misc]

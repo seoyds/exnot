@@ -56,13 +56,15 @@ async def classify_tables_hybrid(
 
         # Clear-cut: score >= 2 (definitely fee) or score <= -2 (definitely not)
         if abs(rule_result.score) >= 2:
-            results.append(TableClassification(
-                table_index=i,
-                is_fee_table=rule_result.is_fee_table,
-                table_type="FEE_TRANSACTION" if rule_result.is_fee_table else "OTHER",
-                confidence=1.0,
-                reasoning=f"Rule-based: {rule_result.reason}",
-            ))
+            results.append(
+                TableClassification(
+                    table_index=i,
+                    is_fee_table=rule_result.is_fee_table,
+                    table_type="FEE_TRANSACTION" if rule_result.is_fee_table else "OTHER",
+                    confidence=1.0,
+                    reasoning=f"Rule-based: {rule_result.reason}",
+                )
+            )
             continue
 
         # Ambiguous (score is -1, 0, or 1): use AI if available
@@ -73,13 +75,15 @@ async def classify_tables_hybrid(
                 continue
 
         # Fallback to rule-based result
-        results.append(TableClassification(
-            table_index=i,
-            is_fee_table=rule_result.is_fee_table,
-            table_type="FEE_TRANSACTION" if rule_result.is_fee_table else "OTHER",
-            confidence=0.5,
-            reasoning=f"Rule-based (ambiguous): {rule_result.reason}",
-        ))
+        results.append(
+            TableClassification(
+                table_index=i,
+                is_fee_table=rule_result.is_fee_table,
+                table_type="FEE_TRANSACTION" if rule_result.is_fee_table else "OTHER",
+                confidence=0.5,
+                reasoning=f"Rule-based (ambiguous): {rule_result.reason}",
+            )
+        )
 
     return results
 
@@ -94,10 +98,7 @@ async def _classify_with_ai(
 
     # Build compact table representation (truncate cells to avoid token bloat)
     headers = " | ".join(h[:100] for h in table.headers[:15]) if table.headers else "(no headers)"
-    sample_rows = "\n".join(
-        " | ".join(str(c)[:200] for c in row[:15])
-        for row in table.rows[:3]
-    )
+    sample_rows = "\n".join(" | ".join(str(c)[:200] for c in row[:15]) for row in table.rows[:3])
     prompt = (
         f"Classify this table (index {table_index}):\n"
         f"Title: {table.title or '(untitled)'}\n"

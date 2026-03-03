@@ -1,4 +1,5 @@
 """Profile builder - learns table mappings from AI extraction output."""
+
 import logging
 import re
 from dataclasses import dataclass, field
@@ -14,6 +15,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class BuildResult:
     """Result of profile building."""
+
     table_mappings: list[dict] = field(default_factory=list)
     table_fingerprints: dict = field(default_factory=dict)
     extraction_stats: dict = field(default_factory=dict)
@@ -100,9 +102,7 @@ class ProfileBuilder:
             row_label = re.sub(r"\s+", " ", row_label)
             participant = fee.get("participant_type")
             if participant and row_label:
-                table_matches[tbl_idx]["row_labels"][row_label] = {
-                    "participant_type": participant
-                }
+                table_matches[tbl_idx]["row_labels"][row_label] = {"participant_type": participant}
 
             # Record column mapping
             col_key = col_idx
@@ -133,14 +133,16 @@ class ProfileBuilder:
 
             column_groups = []
             for sc, cols in col_groups.items():
-                column_groups.append({
-                    "label": sc,
-                    "security_class": sc,
-                    "columns": [
-                        {"header": c["header"], "fee_type": c["fee_type"], "col_index": c["col_index"]}
-                        for c in sorted(cols, key=lambda x: x["col_index"])
-                    ],
-                })
+                column_groups.append(
+                    {
+                        "label": sc,
+                        "security_class": sc,
+                        "columns": [
+                            {"header": c["header"], "fee_type": c["fee_type"], "col_index": c["col_index"]}
+                            for c in sorted(cols, key=lambda x: x["col_index"])
+                        ],
+                    }
+                )
 
             # Detect contra-party column
             has_contra = False
@@ -173,12 +175,14 @@ class ProfileBuilder:
         for i, cls in enumerate(classifications):
             if i not in table_matches:
                 fp = fingerprint_table(tables[i])
-                result.table_mappings.append({
-                    "table_index": i,
-                    "fingerprint": fp,
-                    "table_title": tables[i].title or f"Table {i + 1}",
-                    "is_fee_table": False,
-                })
+                result.table_mappings.append(
+                    {
+                        "table_index": i,
+                        "fingerprint": fp,
+                        "table_title": tables[i].title or f"Table {i + 1}",
+                        "is_fee_table": False,
+                    }
+                )
 
         # Extraction stats
         participant_types = sorted(set(f.get("participant_type", "") for f in ai_fees if f.get("participant_type")))

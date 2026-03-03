@@ -1,6 +1,5 @@
 """Tests for the exchange registry."""
 
-
 from exnot.exchanges.registry import get_all_exchanges, load_all_definitions
 
 

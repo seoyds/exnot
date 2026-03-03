@@ -43,9 +43,7 @@ def run_discovery_pipeline(exchange_code: str, session: Session, force: bool = F
 
     logger.info(f"[{exchange_code}] Starting URL discovery...")
 
-    result = asyncio.run(
-        _run_async_discovery(exchange.code, exchange.name, exchange.operator)
-    )
+    result = asyncio.run(_run_async_discovery(exchange.code, exchange.name, exchange.operator))
 
     # Record discovery log
     log = DiscoveryLog(
@@ -63,9 +61,7 @@ def run_discovery_pipeline(exchange_code: str, session: Session, force: bool = F
     if result.primary_url and result.confidence >= 0.5:
         exchange.fee_schedule_url = result.primary_url
         exchange.alternate_urls = result.alternate_urls if result.alternate_urls else []
-        exchange.fee_schedule_format = FORMAT_MAP.get(
-            result.recommended_format, exchange.fee_schedule_format
-        )
+        exchange.fee_schedule_format = FORMAT_MAP.get(result.recommended_format, exchange.fee_schedule_format)
         exchange.discovery_status = DiscoveryStatus.DISCOVERED
         exchange.discovered_at = datetime.utcnow()
         exchange.discovery_metadata = {

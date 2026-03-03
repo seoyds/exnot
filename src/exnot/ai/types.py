@@ -80,7 +80,7 @@ class ExtractedFee(BaseModel):
     notes: str | None = None
 
     @model_validator(mode="after")
-    def validate_amount(self) -> "ExtractedFee":
+    def validate_amount(self) -> ExtractedFee:
         # V3 validation
         if self.fee_value is not None and self.fee_type == "PER_CONTRACT" and abs(self.fee_value) > 10.0:
             raise ValueError(

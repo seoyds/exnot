@@ -1,4 +1,5 @@
 """Tests for table classification (fee vs non-fee)."""
+
 from exnot.parser.base import ExtractedTable
 from exnot.parser.table_classifier import classify_table, classify_tables
 

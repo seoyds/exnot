@@ -1,6 +1,6 @@
 """Tests for ExchangeProfile model."""
+
 import uuid
-from datetime import datetime
 
 from exnot.db.models import ExchangeProfile, ProfileStatus
 

@@ -1,12 +1,16 @@
 """Tests for profile builder - learns table mappings from AI extraction."""
+
 from exnot.parser.base import ExtractedTable
 from exnot.profiles.builder import ProfileBuilder
 
 
 def _make_table(headers, rows, title=""):
     return ExtractedTable(
-        headers=headers, rows=rows, title=title,
-        page_number=1, footnotes=[],
+        headers=headers,
+        rows=rows,
+        title=title,
+        page_number=1,
+        footnotes=[],
     )
 
 
@@ -22,14 +26,38 @@ def test_builder_matches_fees_to_cells():
         ),
     ]
     ai_fees = [
-        {"participant_type": "CUSTOMER", "fee_type": "MAKER", "amount": 0.00,
-         "security_class": "PENNY", "order_type": "SIMPLE", "section_ref": ""},
-        {"participant_type": "CUSTOMER", "fee_type": "TAKER", "amount": -0.20,
-         "security_class": "PENNY", "order_type": "SIMPLE", "section_ref": ""},
-        {"participant_type": "PROFESSIONAL", "fee_type": "MAKER", "amount": 0.50,
-         "security_class": "PENNY", "order_type": "SIMPLE", "section_ref": ""},
-        {"participant_type": "PROFESSIONAL", "fee_type": "TAKER", "amount": 0.45,
-         "security_class": "PENNY", "order_type": "SIMPLE", "section_ref": ""},
+        {
+            "participant_type": "CUSTOMER",
+            "fee_type": "MAKER",
+            "amount": 0.00,
+            "security_class": "PENNY",
+            "order_type": "SIMPLE",
+            "section_ref": "",
+        },
+        {
+            "participant_type": "CUSTOMER",
+            "fee_type": "TAKER",
+            "amount": -0.20,
+            "security_class": "PENNY",
+            "order_type": "SIMPLE",
+            "section_ref": "",
+        },
+        {
+            "participant_type": "PROFESSIONAL",
+            "fee_type": "MAKER",
+            "amount": 0.50,
+            "security_class": "PENNY",
+            "order_type": "SIMPLE",
+            "section_ref": "",
+        },
+        {
+            "participant_type": "PROFESSIONAL",
+            "fee_type": "TAKER",
+            "amount": 0.45,
+            "security_class": "PENNY",
+            "order_type": "SIMPLE",
+            "section_ref": "",
+        },
     ]
     builder = ProfileBuilder()
     result = builder.build(tables, ai_fees)
@@ -58,8 +86,14 @@ def test_builder_skips_non_fee_tables():
         ),
     ]
     ai_fees = [
-        {"participant_type": "CUSTOMER", "fee_type": "TRANSACTION", "amount": 0.50,
-         "security_class": "ALL", "order_type": "SIMPLE", "section_ref": ""},
+        {
+            "participant_type": "CUSTOMER",
+            "fee_type": "TRANSACTION",
+            "amount": 0.50,
+            "security_class": "ALL",
+            "order_type": "SIMPLE",
+            "section_ref": "",
+        },
     ]
     builder = ProfileBuilder()
     result = builder.build(tables, ai_fees)
@@ -73,8 +107,14 @@ def test_builder_handles_zero_match():
     """If no fees match any table cells, match_ratio should be 0."""
     tables = [_make_table(["A", "B"], [["x", "y"]])]
     ai_fees = [
-        {"participant_type": "CUSTOMER", "fee_type": "MAKER", "amount": 99.99,
-         "security_class": "PENNY", "order_type": "SIMPLE", "section_ref": ""},
+        {
+            "participant_type": "CUSTOMER",
+            "fee_type": "MAKER",
+            "amount": 99.99,
+            "security_class": "PENNY",
+            "order_type": "SIMPLE",
+            "section_ref": "",
+        },
     ]
     builder = ProfileBuilder()
     result = builder.build(tables, ai_fees)

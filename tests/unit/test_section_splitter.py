@@ -3,7 +3,6 @@
 from exnot.parser.base import ExtractedDocument, ExtractedTable
 from exnot.parser.section_splitter import (
     DocumentSection,
-    SectionGroup,
     classify_context_sections,
     group_sections,
     should_use_sectioned_extraction,
@@ -74,14 +73,7 @@ def test_heading_detection_all_caps():
 
 def test_heading_detection_numbered():
     """Numbered section headings should be detected."""
-    text = (
-        "--- Page 1 ---\n"
-        "1. Regular Orders\n"
-        "Fee data here\n"
-        "--- Page 2 ---\n"
-        "2. Complex Orders\n"
-        "More data\n"
-    )
+    text = "--- Page 1 ---\n1. Regular Orders\nFee data here\n--- Page 2 ---\n2. Complex Orders\nMore data\n"
     doc = _make_doc(text, page_count=2)
     sections = split_document(doc, format_hint="pdf")
 
@@ -113,14 +105,7 @@ def test_pages_without_headings_merge():
 
 def test_tables_assigned_by_page():
     """Tables should be assigned to the correct section by page_number."""
-    text = (
-        "--- Page 1 ---\n"
-        "REGULAR FEES\n"
-        "Some text\n"
-        "--- Page 3 ---\n"
-        "COMPLEX FEES\n"
-        "Other text\n"
-    )
+    text = "--- Page 1 ---\nREGULAR FEES\nSome text\n--- Page 3 ---\nCOMPLEX FEES\nOther text\n"
     t1 = _make_table("Reg Table", page_number=1)
     t2 = _make_table("Complex Table", page_number=3)
     doc = _make_doc(text, [t1, t2], page_count=3)
@@ -187,10 +172,7 @@ def test_fee_section_not_marked_context():
 
 def test_group_sections_respects_budget():
     """Groups should stay under the character budget."""
-    sections = [
-        DocumentSection(heading=f"Section {i}", text="x" * 5000)
-        for i in range(5)
-    ]
+    sections = [DocumentSection(heading=f"Section {i}", text="x" * 5000) for i in range(5)]
     groups = group_sections(sections, char_budget=12000)
 
     # 5 sections of 5K chars each, budget 12K → at least 3 groups

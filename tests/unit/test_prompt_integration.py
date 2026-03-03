@@ -12,6 +12,7 @@ class TestExtractionDepsPromptField:
     def test_exchange_prompt_default_empty(self):
         """exchange_prompt should default to empty string."""
         from unittest.mock import MagicMock
+
         deps = ExtractionDeps(
             model_registry=MagicMock(),
             cost_tracker=MagicMock(),

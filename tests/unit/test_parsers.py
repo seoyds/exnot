@@ -1,6 +1,5 @@
 """Tests for PDF and HTML parsers."""
 
-
 from exnot.parser.html_parser import HtmlParser
 
 

@@ -49,9 +49,7 @@ class TestFeeValidator:
                 is_rebate=False,
             ),
         ]
-        schedule = NormalizedFeeSchedule(
-            exchange_code="TEST", exchange_name="Test", fees=fees
-        )
+        schedule = NormalizedFeeSchedule(exchange_code="TEST", exchange_name="Test", fees=fees)
         result = self.validator.validate(schedule)
         assert any("CUSTOMER" in w for w in result.warnings)
 
@@ -67,9 +65,7 @@ class TestFeeValidator:
                 is_rebate=False,
             ),
         ]
-        schedule = NormalizedFeeSchedule(
-            exchange_code="TEST", exchange_name="Test", fees=fees
-        )
+        schedule = NormalizedFeeSchedule(exchange_code="TEST", exchange_name="Test", fees=fees)
         result = self.validator.validate(schedule)
         assert any("Unusually large fee" in w for w in result.warnings)
 
@@ -86,9 +82,7 @@ class TestFeeValidator:
                 is_rebate=False,
             ),
         ]
-        schedule = NormalizedFeeSchedule(
-            exchange_code="TEST", exchange_name="Test", fees=fees
-        )
+        schedule = NormalizedFeeSchedule(exchange_code="TEST", exchange_name="Test", fees=fees)
         result = self.validator.validate(schedule)
         # Should not warn about unusually large fee for index options at 4.50
         assert not any("Unusually large fee" in w for w in result.warnings)

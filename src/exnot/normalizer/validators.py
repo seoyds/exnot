@@ -47,9 +47,7 @@ class FeeValidator:
 
         return result
 
-    def _check_minimum_coverage(
-        self, schedule: NormalizedFeeSchedule, result: ValidationResult
-    ):
+    def _check_minimum_coverage(self, schedule: NormalizedFeeSchedule, result: ValidationResult):
         """Check that we have minimum expected fee coverage."""
         participant_types = {f.participant_type for f in schedule.fees}
         fee_types = {f.fee_type for f in schedule.fees}
@@ -70,22 +68,15 @@ class FeeValidator:
 
         if len(schedule.fees) < 4:
             result.add_warning(
-                f"{schedule.exchange_code}: Only {len(schedule.fees)} fees - "
-                "expected at least 4 for a minimal schedule"
+                f"{schedule.exchange_code}: Only {len(schedule.fees)} fees - expected at least 4 for a minimal schedule"
             )
 
-    def _check_amount_ranges(
-        self, schedule: NormalizedFeeSchedule, result: ValidationResult
-    ):
+    def _check_amount_ranges(self, schedule: NormalizedFeeSchedule, result: ValidationResult):
         """Check that fee amounts are within reasonable ranges."""
         for fee in schedule.fees:
             from exnot.normalizer.schema import SecurityClass
 
-            max_amt = (
-                self.MAX_INDEX_AMOUNT
-                if fee.security_class == SecurityClass.INDEX
-                else self.MAX_AMOUNT
-            )
+            max_amt = self.MAX_INDEX_AMOUNT if fee.security_class == SecurityClass.INDEX else self.MAX_AMOUNT
 
             if fee.amount < self.MIN_AMOUNT:
                 result.add_warning(
@@ -99,9 +90,7 @@ class FeeValidator:
                     f"for {fee.participant_type.value}/{fee.fee_type.value}"
                 )
 
-    def _check_duplicates(
-        self, schedule: NormalizedFeeSchedule, result: ValidationResult
-    ):
+    def _check_duplicates(self, schedule: NormalizedFeeSchedule, result: ValidationResult):
         """Check for duplicate fee entries."""
         seen = set()
         for fee in schedule.fees:

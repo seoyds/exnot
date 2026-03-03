@@ -27,10 +27,18 @@ CSV_SECTION_MARKER = re.compile(r"^---\s*Section\s+\d+:\s*(.+?)\s*---$")
 
 # Keywords that identify context sections (definitions, footnotes, appendix)
 CONTEXT_KEYWORDS = [
-    "definition", "glossary", "footnote", "endnote",
-    "appendix", "exhibit", "abbreviation",
-    "explanation of terms", "general notes",
-    "important notice", "preamble", "table of contents",
+    "definition",
+    "glossary",
+    "footnote",
+    "endnote",
+    "appendix",
+    "exhibit",
+    "abbreviation",
+    "explanation of terms",
+    "general notes",
+    "important notice",
+    "preamble",
+    "table of contents",
 ]
 
 # Dollar amount pattern for context classification
@@ -49,10 +57,7 @@ class DocumentSection:
 
     @property
     def char_count(self) -> int:
-        table_chars = sum(
-            len(str(t.headers)) + sum(len(str(r)) for r in t.rows)
-            for t in self.tables
-        )
+        table_chars = sum(len(str(t.headers)) + sum(len(str(r)) for r in t.rows) for t in self.tables)
         return len(self.text) + table_chars
 
 
@@ -72,9 +77,7 @@ def should_use_sectioned_extraction(document: ExtractedDocument) -> bool:
     return len(document.full_text) > 20000 or len(document.tables) > 8
 
 
-def split_document(
-    document: ExtractedDocument, format_hint: str = "pdf"
-) -> list[DocumentSection]:
+def split_document(document: ExtractedDocument, format_hint: str = "pdf") -> list[DocumentSection]:
     """Split an ExtractedDocument into logical sections.
 
     Args:
@@ -105,11 +108,13 @@ def _split_pdf_text(document: ExtractedDocument) -> list[DocumentSection]:
     """Split PDF text on page markers, then detect headings within pages."""
     pages = _extract_pages(document.full_text)
     if not pages:
-        return [DocumentSection(
-            heading="Full Document",
-            text=document.full_text,
-            tables=list(document.tables),
-        )]
+        return [
+            DocumentSection(
+                heading="Full Document",
+                text=document.full_text,
+                tables=list(document.tables),
+            )
+        ]
 
     # Build table lookup by page number
     tables_by_page: dict[int, list[ExtractedTable]] = {}
@@ -135,12 +140,14 @@ def _split_pdf_text(document: ExtractedDocument) -> list[DocumentSection]:
             if _is_heading(stripped):
                 # Flush previous section
                 if current_text_parts and current_heading:
-                    sections.append(DocumentSection(
-                        heading=current_heading,
-                        text="\n".join(current_text_parts),
-                        tables=current_tables,
-                        page_range=(current_start_page or page_num, page_num),
-                    ))
+                    sections.append(
+                        DocumentSection(
+                            heading=current_heading,
+                            text="\n".join(current_text_parts),
+                            tables=current_tables,
+                            page_range=(current_start_page or page_num, page_num),
+                        )
+                    )
                     current_text_parts = []
                     current_tables = []
 
@@ -156,12 +163,14 @@ def _split_pdf_text(document: ExtractedDocument) -> list[DocumentSection]:
     # Flush last section
     if current_text_parts:
         last_page = pages[-1][0] if pages else 1
-        sections.append(DocumentSection(
-            heading=current_heading or f"Pages {current_start_page or 1}-{last_page}",
-            text="\n".join(current_text_parts),
-            tables=current_tables,
-            page_range=(current_start_page or 1, last_page),
-        ))
+        sections.append(
+            DocumentSection(
+                heading=current_heading or f"Pages {current_start_page or 1}-{last_page}",
+                text="\n".join(current_text_parts),
+                tables=current_tables,
+                page_range=(current_start_page or 1, last_page),
+            )
+        )
 
     # Assign any unassigned tables (page_number=None) to first section
     assigned_tables = {id(t) for s in sections for t in s.tables}
@@ -183,19 +192,23 @@ def _split_html_text(document: ExtractedDocument) -> list[DocumentSection]:
         stripped = line.strip()
         if _is_heading(stripped):
             if current_parts:
-                sections.append(DocumentSection(
-                    heading=current_heading or "Introduction",
-                    text="\n".join(current_parts),
-                ))
+                sections.append(
+                    DocumentSection(
+                        heading=current_heading or "Introduction",
+                        text="\n".join(current_parts),
+                    )
+                )
                 current_parts = []
             current_heading = stripped
         current_parts.append(line)
 
     if current_parts:
-        sections.append(DocumentSection(
-            heading=current_heading or "Full Document",
-            text="\n".join(current_parts),
-        ))
+        sections.append(
+            DocumentSection(
+                heading=current_heading or "Full Document",
+                text="\n".join(current_parts),
+            )
+        )
 
     # Assign tables to sections by title proximity
     _assign_tables_to_sections(sections, document.tables)
@@ -264,9 +277,7 @@ def _split_docling_markdown(document: ExtractedDocument) -> list[DocumentSection
     return sections
 
 
-def _chunk_by_size(
-    document: ExtractedDocument, target_chars: int = 12000
-) -> list[DocumentSection]:
+def _chunk_by_size(document: ExtractedDocument, target_chars: int = 12000) -> list[DocumentSection]:
     """Fallback: chunk the document by character count."""
     text = document.full_text
     sections: list[DocumentSection] = []
@@ -283,10 +294,12 @@ def _chunk_by_size(
 
         chunk_text = text[start:end]
         chunk_num += 1
-        sections.append(DocumentSection(
-            heading=f"Chunk {chunk_num}",
-            text=chunk_text,
-        ))
+        sections.append(
+            DocumentSection(
+                heading=f"Chunk {chunk_num}",
+                text=chunk_text,
+            )
+        )
         start = end
 
     # Distribute tables evenly
@@ -320,9 +333,7 @@ def classify_context_sections(
     return sections
 
 
-def group_sections(
-    fee_sections: list[DocumentSection], char_budget: int = 15000
-) -> list[SectionGroup]:
+def group_sections(fee_sections: list[DocumentSection], char_budget: int = 15000) -> list[SectionGroup]:
     """Group fee-bearing sections into chunks that fit the character budget."""
     if not fee_sections:
         return []
@@ -387,9 +398,7 @@ def _is_heading(line: str) -> bool:
     )
 
 
-def _assign_tables_to_sections(
-    sections: list[DocumentSection], tables: list[ExtractedTable]
-) -> None:
+def _assign_tables_to_sections(sections: list[DocumentSection], tables: list[ExtractedTable]) -> None:
     """Assign tables to sections by matching table titles against section text."""
     for table in tables:
         best_idx = len(sections) - 1  # Default to last section
