@@ -77,6 +77,44 @@ class FeeUnit(str, Enum):
     PER_ORDER = "PER_ORDER"
 
 
+class OriginCode(str, Enum):
+    CUSTOMER = "CUSTOMER"
+    PROFESSIONAL = "PROFESSIONAL"
+    FIRM = "FIRM"
+    BROKER_DEALER = "BROKER_DEALER"
+    MARKET_MAKER = "MARKET_MAKER"
+    AWAY_MARKET_MAKER = "AWAY_MARKET_MAKER"
+    ANY = "ANY"
+
+
+class ProductType(str, Enum):
+    SIMPLE = "SIMPLE"
+    COMPLEX = "COMPLEX"
+
+
+class ListingType(str, Enum):
+    EQUITY = "EQUITY"
+    ETF = "ETF"
+    INDEX = "INDEX"
+
+
+class PennyClass(str, Enum):
+    PENNY = "PENNY"
+    NON_PENNY = "NON_PENNY"
+
+
+class ExecVenue(str, Enum):
+    ELECTRONIC = "ELECTRONIC"
+    FLOOR = "FLOOR"
+    ROUTED = "ROUTED"
+
+
+class LiquidityRole(str, Enum):
+    MAKER = "MAKER"
+    TAKER = "TAKER"
+    NONE = "NONE"
+
+
 class TierConditionCriterion(BaseModel):
     """A single criterion within a tier condition."""
     metric: str = Field(description="ADAV, ADRV, ADV, NBBO_PCT, TOTAL_VOLUME, CCV_PCT, CROSS_ASSET")
