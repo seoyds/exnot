@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
 
+    # Direct provider API keys (bypass OpenRouter when set)
+    dashscope_api_key: str = ""  # Alibaba Cloud DashScope for Qwen models
+
     # Email (Gmail SMTP)
     smtp_host: str = "smtp.gmail.com"
     smtp_port: int = 587
@@ -52,24 +55,23 @@ class Settings(BaseSettings):
     pdf_parser_backend: str = "pymupdf"  # "pymupdf" or "docling"
 
     # AI — default model (fallback for all tasks)
-    ai_model: str = "deepseek/deepseek-v3.2-20251201"
+    ai_model: str = "qwen/qwen3.5-flash"
     ai_max_tokens: int = 32768
     ai_confidence_threshold: float = 0.8
     ai_max_retries: int = 3
     ai_section_char_budget: int = 15000
 
-    # Per-task model routing (all OpenRouter model IDs, all < $0.40/M tokens)
-    # DeepSeek V3.2: $0.25/M input, $0.40/M output — best quality at budget
-    ai_model_table_classification: str = "deepseek/deepseek-v3.2-20251201"
-    ai_model_orchestrator: str = "deepseek/deepseek-v3.2-20251201"
-    ai_model_fee_extraction: str = "deepseek/deepseek-v3.2-20251201"
-    ai_model_fee_validation: str = "deepseek/deepseek-v3.2-20251201"
-    ai_model_correction: str = "deepseek/deepseek-v3.2-20251201"
-    ai_model_url_discovery: str = "deepseek/deepseek-v3.2-20251201"
-    ai_model_change_summary: str = "deepseek/deepseek-v3.2-20251201"
+    # Per-task model routing (Qwen via DashScope direct, $0.10/M input, $0.40/M output)
+    ai_model_table_classification: str = "qwen/qwen3.5-flash"
+    ai_model_orchestrator: str = "qwen/qwen3.5-flash"
+    ai_model_fee_extraction: str = "qwen/qwen3.5-flash"
+    ai_model_fee_validation: str = "qwen/qwen3.5-flash"
+    ai_model_correction: str = "qwen/qwen3.5-flash"
+    ai_model_url_discovery: str = "qwen/qwen3.5-flash"
+    ai_model_change_summary: str = "qwen/qwen3.5-flash"
 
     # Budget guardrails
-    ai_budget_per_exchange_usd: float = 2.00
+    ai_budget_per_exchange_usd: float = 1.00
     ai_budget_daily_usd: float = 15.00
 
     # URL Discovery

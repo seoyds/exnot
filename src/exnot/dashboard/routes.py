@@ -22,6 +22,7 @@ from exnot.db.models import (
     FeeType,
     NormalizedFee,
     NotificationFrequency,
+    OrderType,
     ParticipantType,
     SecurityClass,
     Subscriber,
@@ -175,6 +176,12 @@ async def exchange_detail(
 
     user = await _get_current_user_from_cookie(request, db)
 
+    # Enum values for filter dropdowns
+    participant_types = [pt.value for pt in ParticipantType]
+    security_classes = [sc.value for sc in SecurityClass]
+    order_types = [ot.value for ot in OrderType]
+    fee_types = [ft.value for ft in FeeType]
+
     return templates.TemplateResponse(
         "exchange.html",
         {
@@ -187,6 +194,10 @@ async def exchange_detail(
             "cents_to_dollars": _cents_to_dollars,
             "format_file_size": _format_file_size,
             "user": user,
+            "participant_types": participant_types,
+            "security_classes": security_classes,
+            "order_types": order_types,
+            "fee_types": fee_types,
             "success": request.query_params.get("success"),
             "error": request.query_params.get("error"),
         },
@@ -315,6 +326,11 @@ async def compare_page(
     participant_type: str | None = Query(default=None),
     security_class: str | None = Query(default=None),
     fee_type: str | None = Query(default=None),
+    # V3 filters
+    origin_code: str | None = Query(default=None),
+    liquidity_role: str | None = Query(default=None),
+    exec_venue: str | None = Query(default=None),
+    product_type: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
     """Fee comparison page across multiple exchanges."""
@@ -346,6 +362,15 @@ async def compare_page(
                 if security_class and f.security_class.value != security_class.upper():
                     continue
                 if fee_type and f.fee_type.value != fee_type.upper():
+                    continue
+                # V3 filters
+                if origin_code and (not f.origin_code or f.origin_code.upper() != origin_code.upper()):
+                    continue
+                if liquidity_role and (not f.liquidity_role or f.liquidity_role.upper() != liquidity_role.upper()):
+                    continue
+                if exec_venue and (not f.exec_venue or f.exec_venue.upper() != exec_venue.upper()):
+                    continue
+                if product_type and (not f.product_type or f.product_type.upper() != product_type.upper()):
                     continue
                 key = (
                     f.participant_type.value,
@@ -396,6 +421,14 @@ async def compare_page(
     security_classes = [sc.value for sc in SecurityClass]
     fee_types = [ft.value for ft in FeeType]
 
+    # V3 enum values for advanced filters
+    from exnot.normalizer.schema import ExecVenue, LiquidityRole, OriginCode, ProductType
+
+    origin_codes = [oc.value for oc in OriginCode]
+    liquidity_roles = [lr.value for lr in LiquidityRole]
+    exec_venues = [ev.value for ev in ExecVenue]
+    product_types_v3 = [pt.value for pt in ProductType]
+
     return templates.TemplateResponse(
         "comparison.html",
         {
@@ -409,6 +442,14 @@ async def compare_page(
             "current_participant_type": participant_type or "",
             "current_security_class": security_class or "",
             "current_fee_type": fee_type or "",
+            "origin_codes": origin_codes,
+            "liquidity_roles": liquidity_roles,
+            "exec_venues": exec_venues,
+            "product_types_v3": product_types_v3,
+            "current_origin_code": origin_code or "",
+            "current_liquidity_role": liquidity_role or "",
+            "current_exec_venue": exec_venue or "",
+            "current_product_type": product_type or "",
             "user": user,
         },
     )

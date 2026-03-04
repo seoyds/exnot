@@ -128,51 +128,15 @@
 
             <div id="docs-body" class="hidden">
             {% if documents %}
-            <!-- Mobile: card layout -->
-            <div class="sm:hidden divide-y divide-slate-200">
-                {% for doc in documents %}
-                <div class="p-4 {% if loop.index is odd %}bg-white{% else %}bg-slate-50{% endif %}">
-                    <div class="flex items-center justify-between mb-2">
-                        <div class="flex items-center gap-2">
-                            {% if 'pdf' in doc.content_type %}
-                            <span class="inline-flex items-center rounded bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">PDF</span>
-                            {% elif 'csv' in doc.content_type %}
-                            <span class="inline-flex items-center rounded bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">CSV</span>
-                            {% elif 'html' in doc.content_type %}
-                            <span class="inline-flex items-center rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">HTML</span>
-                            {% else %}
-                            <span class="inline-flex items-center rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">{{ doc.content_type.split('/')[-1] | upper }}</span>
-                            {% endif %}
-                            {% if doc.is_primary %}
-                            <span class="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">Primary</span>
-                            {% endif %}
-                        </div>
-                        <span class="text-xs text-slate-500 font-mono">{{ format_file_size(doc.file_size_bytes) }}</span>
-                    </div>
-                    <p class="text-sm font-mono text-slate-700 truncate">{{ doc.storage_path.split('/')[-1] }}</p>
-                    <div class="mt-2 flex items-center justify-between">
-                        <span class="text-xs text-slate-400">{{ doc.fetched_at.strftime('%Y-%m-%d %H:%M') }}</span>
-                        <a href="/dashboard/exchanges/{{ exchange.code }}/documents/{{ doc.id }}/download"
-                           class="inline-flex items-center gap-1 rounded-md bg-blue-600 px-2.5 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-blue-500">
-                            <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
-                            </svg>
-                            Download
-                        </a>
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-            <!-- Desktop: table layout -->
-            <div class="hidden sm:block overflow-x-auto">
+            <div class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-slate-200">
                     <thead class="bg-slate-50">
                         <tr>
                             <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Type</th>
                             <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Filename</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Source URL</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 hidden sm:table-cell">Source URL</th>
                             <th class="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-slate-500">Size</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Fetched</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 hidden sm:table-cell">Fetched</th>
                             <th class="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider text-slate-500">Primary</th>
                             <th class="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider text-slate-500">Download</th>
                         </tr>
@@ -194,7 +158,7 @@
                             <td class="whitespace-nowrap px-4 py-3 text-sm text-slate-900 font-mono">
                                 {{ doc.storage_path.split('/')[-1] }}
                             </td>
-                            <td class="px-4 py-3 text-sm max-w-[200px]">
+                            <td class="px-4 py-3 text-sm max-w-[200px] hidden sm:table-cell">
                                 <a href="{{ doc.source_url }}" target="_blank" rel="noopener noreferrer"
                                    class="text-blue-600 hover:text-blue-500 truncate block" title="{{ doc.source_url }}">
                                     {{ doc.source_url | truncate(50) }}
@@ -206,7 +170,7 @@
                             <td class="whitespace-nowrap px-4 py-3 text-sm text-slate-700 text-right font-mono">
                                 {{ format_file_size(doc.file_size_bytes) }}
                             </td>
-                            <td class="whitespace-nowrap px-4 py-3 text-xs text-slate-500">
+                            <td class="whitespace-nowrap px-4 py-3 text-xs text-slate-500 hidden sm:table-cell">
                                 {{ doc.fetched_at.strftime('%Y-%m-%d %H:%M') }}
                             </td>
                             <td class="whitespace-nowrap px-4 py-3 text-sm text-center">
@@ -222,7 +186,7 @@
                                     <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
                                     </svg>
-                                    Download
+                                    <span class="hidden sm:inline">Download</span>
                                 </a>
                             </td>
                         </tr>
@@ -239,34 +203,138 @@
                 <p class="mt-1 text-xs text-slate-400">Documents will appear after a successful scrape.</p>
             </div>
             {% endif %}
-            </div><!-- /docs-body -->
+            </div>
         </div>
 
         <!-- Fee Schedule -->
         <div class="rounded-lg bg-white shadow-sm border border-slate-200 overflow-hidden"
              id="fee-table-container">
+            <!-- Header with view toggle -->
             <div class="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-200 bg-slate-50">
-                <h2 class="text-base sm:text-lg font-semibold text-slate-900">Current Fee Schedule</h2>
-                {% if latest_snapshot %}
-                <p class="text-xs text-slate-500 mt-1">
-                    v{{ latest_snapshot.version }}
-                    {% if latest_snapshot.effective_date %}
-                    &middot; Eff. {{ latest_snapshot.effective_date.strftime('%Y-%m-%d') }}
-                    {% endif %}
-                    &middot; {{ latest_snapshot.status.value }}
-                    {% if latest_snapshot.parsing_confidence %}
-                    &middot; {{ "%.0f"|format(latest_snapshot.parsing_confidence * 100) }}% conf.
-                    {% endif %}
-                </p>
+                <div class="flex items-center justify-between flex-wrap gap-2">
+                    <div>
+                        <h2 class="text-base sm:text-lg font-semibold text-slate-900">Current Fee Schedule</h2>
+                        {% if latest_snapshot %}
+                        <p class="text-xs text-slate-500 mt-1">
+                            v{{ latest_snapshot.version }}
+                            {% if latest_snapshot.effective_date %}
+                            &middot; Eff. {{ latest_snapshot.effective_date.strftime('%Y-%m-%d') }}
+                            {% endif %}
+                            &middot; {{ latest_snapshot.status.value }}
+                            {% if latest_snapshot.parsing_confidence %}
+                            &middot; {{ "%.0f"|format(latest_snapshot.parsing_confidence * 100) }}% conf.
+                            {% endif %}
+                        </p>
+                        {% endif %}
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <!-- View toggle -->
+                        <div class="inline-flex rounded-md shadow-sm" role="group">
+                            <button type="button" id="btn-table-view"
+                                    onclick="switchView('table')"
+                                    class="view-btn inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-l-md border border-slate-300 bg-blue-600 text-white transition-colors"
+                                    title="Table view">
+                                <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 01-1.125-1.125M3.375 19.5h7.5c.621 0 1.125-.504 1.125-1.125m-9.75 0V5.625m0 12.75v-1.5c0-.621.504-1.125 1.125-1.125m18.375 2.625V5.625m0 12.75c0 .621-.504 1.125-1.125 1.125m1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-7.5A1.125 1.125 0 0112 18.375m9.75-12.75c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125m19.5 0v1.5c0 .621-.504 1.125-1.125 1.125M2.25 5.625v1.5c0 .621.504 1.125 1.125 1.125m0 0h17.25m-17.25 0h7.5c.621 0 1.125.504 1.125 1.125M3.375 8.25c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m17.25-3.75h-7.5c-.621 0-1.125.504-1.125 1.125m8.625-1.125c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-17.25 0h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125M12 10.875v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 10.875c0 .621.504 1.125 1.125 1.125m-2.25 0c.621 0 1.125.504 1.125 1.125M13.125 12h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125M20.625 12c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-17.25 0h7.5M12 14.625v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 14.625c0 .621.504 1.125 1.125 1.125m-2.25 0c.621 0 1.125.504 1.125 1.125m0 0v1.5c0 .621-.504 1.125-1.125 1.125" />
+                                </svg>
+                                <span class="hidden sm:inline">Table</span>
+                            </button>
+                            <button type="button" id="btn-card-view"
+                                    onclick="switchView('card')"
+                                    class="view-btn inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-r-md border border-l-0 border-slate-300 bg-white text-slate-600 hover:bg-slate-100 transition-colors"
+                                    title="Card view">
+                                <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
+                                </svg>
+                                <span class="hidden sm:inline">Cards</span>
+                            </button>
+                        </div>
+                        <!-- V3 expand button -->
+                        <button type="button" id="v3-expand-all"
+                                onclick="toggleAllV3()"
+                                class="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 transition-colors">
+                            <svg class="h-3.5 w-3.5 transition-transform duration-150" id="v3-expand-icon" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+                            </svg>
+                            <span id="v3-btn-label">V3</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Filter Bar -->
+                {% if fees %}
+                <div class="mt-3 pt-3 border-t border-slate-200">
+                    <div class="flex flex-wrap gap-2 items-end">
+                        <div class="flex-1 min-w-[120px] max-w-[170px]">
+                            <label class="block text-[10px] font-medium text-slate-500 uppercase tracking-wider mb-1">Participant</label>
+                            <select id="filter-participant" onchange="applyFilters()"
+                                    class="block w-full rounded-md border-slate-300 bg-white py-1.5 pl-2.5 pr-8 text-xs text-slate-700 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                <option value="">All</option>
+                                {% for pt in participant_types %}
+                                <option value="{{ pt }}">{{ pt | replace('_', ' ') | title }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="flex-1 min-w-[120px] max-w-[170px]">
+                            <label class="block text-[10px] font-medium text-slate-500 uppercase tracking-wider mb-1">Security</label>
+                            <select id="filter-security" onchange="applyFilters()"
+                                    class="block w-full rounded-md border-slate-300 bg-white py-1.5 pl-2.5 pr-8 text-xs text-slate-700 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                <option value="">All</option>
+                                {% for sc in security_classes %}
+                                <option value="{{ sc }}">{{ sc | replace('_', ' ') | title }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="flex-1 min-w-[120px] max-w-[170px]">
+                            <label class="block text-[10px] font-medium text-slate-500 uppercase tracking-wider mb-1">Order Type</label>
+                            <select id="filter-order" onchange="applyFilters()"
+                                    class="block w-full rounded-md border-slate-300 bg-white py-1.5 pl-2.5 pr-8 text-xs text-slate-700 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                <option value="">All</option>
+                                {% for ot in order_types %}
+                                <option value="{{ ot }}">{{ ot | replace('_', ' ') | title }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="flex-1 min-w-[120px] max-w-[170px]">
+                            <label class="block text-[10px] font-medium text-slate-500 uppercase tracking-wider mb-1">Fee Type</label>
+                            <select id="filter-feetype" onchange="applyFilters()"
+                                    class="block w-full rounded-md border-slate-300 bg-white py-1.5 pl-2.5 pr-8 text-xs text-slate-700 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                <option value="">All</option>
+                                {% for ft in fee_types %}
+                                <option value="{{ ft }}">{{ ft | replace('_', ' ') | title }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="flex-1 min-w-[140px] max-w-[200px]">
+                            <label class="block text-[10px] font-medium text-slate-500 uppercase tracking-wider mb-1">Search</label>
+                            <input type="text" id="filter-search" oninput="applyFilters()" placeholder="Fee code, description..."
+                                   class="block w-full rounded-md border-slate-300 bg-white py-1.5 px-2.5 text-xs text-slate-700 shadow-sm placeholder-slate-400 focus:border-blue-500 focus:ring-blue-500">
+                        </div>
+                        <button type="button" onclick="clearFilters()"
+                                class="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+                                title="Clear all filters">
+                            <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                            Clear
+                        </button>
+                    </div>
+                    <p class="mt-2 text-[10px] text-slate-400" id="filter-count"></p>
+                </div>
                 {% endif %}
             </div>
 
             {% if fees %}
-            <!-- Mobile: card layout -->
-            <div class="md:hidden divide-y divide-slate-200" id="fee-cards">
+            <!-- Card View -->
+            <div class="divide-y divide-slate-200 hidden" id="fee-cards">
                 {% for fee in fees %}
-                <div class="p-4 {% if loop.index is odd %}bg-white{% else %}bg-slate-50{% endif %}">
-                    <!-- Row 1: Fee code + Amount (most important info) -->
+                <div class="fee-item p-4 {% if loop.index is odd %}bg-white{% else %}bg-slate-50{% endif %}"
+                     data-participant="{{ fee.participant_type.value }}"
+                     data-security="{{ fee.security_class.value }}"
+                     data-order="{{ fee.order_type.value }}"
+                     data-feetype="{{ fee.fee_type.value }}"
+                     data-search="{{ fee.fee_code or '' }} {{ fee.description or '' }} {{ fee.fee_name or '' }} {{ fee.section_ref or '' }}">
+                    <!-- Row 1: Fee code + Amount -->
                     <div class="flex items-center justify-between mb-2">
                         <div class="flex items-center gap-2">
                             {% if fee.fee_code %}
@@ -303,7 +371,7 @@
                         <span class="inline-flex items-center rounded bg-slate-50 px-1.5 py-0.5 text-[10px] text-slate-400 max-w-[160px] truncate">{{ fee.section_ref }}</span>
                         {% endif %}
                     </div>
-                    <!-- Tier conditions expandable (mobile) -->
+                    <!-- Tier conditions expandable -->
                     {% if fee.tier and (fee.tier.notes or (fee.tier.conditions and fee.tier.conditions.get('criteria'))) %}
                     <details class="mt-2">
                         <summary class="text-[10px] text-blue-600 cursor-pointer hover:text-blue-800 select-none">
@@ -324,84 +392,101 @@
                         </div>
                     </details>
                     {% endif %}
+                    <!-- V3 dimensions expandable -->
+                    {% set has_v3_card = fee.origin_code or fee.listing_type or fee.exec_venue or fee.liquidity_role or fee.fee_name or fee.product_type or fee.contra_origin_code or fee.penny_class or fee.auction_type or fee.auction_role or (fee.tier_level is not none) or fee.tier_condition_text %}
+                    {% if has_v3_card %}
+                    <details class="mt-2 v3-card-details">
+                        <summary class="text-[10px] text-blue-600 cursor-pointer hover:text-blue-800 select-none">
+                            V3 dimensions
+                        </summary>
+                        <div class="mt-1.5 rounded bg-slate-100 border border-slate-200 p-2 text-[10px] text-slate-700">
+                            <div class="grid grid-cols-2 gap-x-4 gap-y-1">
+                                {% if fee.fee_name %}
+                                <div class="col-span-2"><span class="font-medium text-slate-500">Fee Name:</span> {{ fee.fee_name }}</div>
+                                {% endif %}
+                                {% if fee.origin_code %}
+                                <div><span class="font-medium text-slate-500">Origin:</span> {{ fee.origin_code }}</div>
+                                {% endif %}
+                                {% if fee.contra_origin_code %}
+                                <div><span class="font-medium text-slate-500">Contra:</span> {{ fee.contra_origin_code }}</div>
+                                {% endif %}
+                                {% if fee.product_type %}
+                                <div><span class="font-medium text-slate-500">Product:</span> {{ fee.product_type }}</div>
+                                {% endif %}
+                                {% if fee.listing_type %}
+                                <div><span class="font-medium text-slate-500">Listing:</span> {{ fee.listing_type }}</div>
+                                {% endif %}
+                                {% if fee.penny_class %}
+                                <div><span class="font-medium text-slate-500">Penny:</span> {{ fee.penny_class }}</div>
+                                {% endif %}
+                                {% if fee.multi_listed is not none %}
+                                <div><span class="font-medium text-slate-500">Multi-Listed:</span> {{ 'Yes' if fee.multi_listed else 'No' }}</div>
+                                {% endif %}
+                                {% if fee.exec_venue %}
+                                <div><span class="font-medium text-slate-500">Venue:</span> {{ fee.exec_venue }}</div>
+                                {% endif %}
+                                {% if fee.liquidity_role %}
+                                <div><span class="font-medium text-slate-500">Liquidity:</span> {{ fee.liquidity_role }}</div>
+                                {% endif %}
+                                {% if fee.auction_type %}
+                                <div><span class="font-medium text-slate-500">Auction:</span> {{ fee.auction_type }}</div>
+                                {% endif %}
+                                {% if fee.auction_role %}
+                                <div><span class="font-medium text-slate-500">Auction Role:</span> {{ fee.auction_role }}</div>
+                                {% endif %}
+                                {% if fee.tier_level is not none %}
+                                <div><span class="font-medium text-slate-500">V3 Tier:</span> {{ fee.tier_level }}</div>
+                                {% endif %}
+                                {% if fee.tier_condition_text %}
+                                <div class="col-span-2"><span class="font-medium text-slate-500">Condition:</span> {{ fee.tier_condition_text }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </details>
+                    {% endif %}
                 </div>
                 {% endfor %}
             </div>
 
-            <!-- Desktop: table layout -->
-            <div class="hidden md:block overflow-x-auto">
+            <!-- Table View -->
+            <div class="overflow-x-auto" id="fee-table">
                 <table class="min-w-full divide-y divide-slate-200">
                     <thead class="bg-slate-50">
                         <tr>
-                            <th scope="col"
-                                class="px-3 lg:px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 cursor-pointer hover:text-slate-700 select-none"
-                                onclick="sortTable(0)">
-                                Code
-                                <svg class="inline h-3 w-3 ml-0.5 opacity-40" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" />
-                                </svg>
+                            <th scope="col" class="px-3 lg:px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 cursor-pointer hover:text-slate-700 select-none" onclick="sortTable(0)">
+                                Code <svg class="inline h-3 w-3 ml-0.5 opacity-40" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" /></svg>
                             </th>
-                            <th scope="col"
-                                class="px-3 lg:px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 cursor-pointer hover:text-slate-700 select-none"
-                                onclick="sortTable(1)">
-                                Participant
-                                <svg class="inline h-3 w-3 ml-0.5 opacity-40" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" />
-                                </svg>
+                            <th scope="col" class="px-3 lg:px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 cursor-pointer hover:text-slate-700 select-none" onclick="sortTable(1)">
+                                Participant <svg class="inline h-3 w-3 ml-0.5 opacity-40" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" /></svg>
                             </th>
-                            <th scope="col"
-                                class="px-3 lg:px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 cursor-pointer hover:text-slate-700 select-none"
-                                onclick="sortTable(2)">
-                                Contra
-                                <svg class="inline h-3 w-3 ml-0.5 opacity-40" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" />
-                                </svg>
+                            <th scope="col" class="px-3 lg:px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 cursor-pointer hover:text-slate-700 select-none" onclick="sortTable(2)">
+                                Contra <svg class="inline h-3 w-3 ml-0.5 opacity-40" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" /></svg>
                             </th>
-                            <th scope="col"
-                                class="px-3 lg:px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 cursor-pointer hover:text-slate-700 select-none"
-                                onclick="sortTable(3)">
-                                Security
-                                <svg class="inline h-3 w-3 ml-0.5 opacity-40" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" />
-                                </svg>
+                            <th scope="col" class="px-3 lg:px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 cursor-pointer hover:text-slate-700 select-none" onclick="sortTable(3)">
+                                Security <svg class="inline h-3 w-3 ml-0.5 opacity-40" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" /></svg>
                             </th>
-                            <th scope="col"
-                                class="px-3 lg:px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 cursor-pointer hover:text-slate-700 select-none"
-                                onclick="sortTable(4)">
-                                Order
-                                <svg class="inline h-3 w-3 ml-0.5 opacity-40" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" />
-                                </svg>
+                            <th scope="col" class="px-3 lg:px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 cursor-pointer hover:text-slate-700 select-none" onclick="sortTable(4)">
+                                Order <svg class="inline h-3 w-3 ml-0.5 opacity-40" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" /></svg>
                             </th>
-                            <th scope="col"
-                                class="px-3 lg:px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 cursor-pointer hover:text-slate-700 select-none"
-                                onclick="sortTable(5)">
-                                Fee Type
-                                <svg class="inline h-3 w-3 ml-0.5 opacity-40" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" />
-                                </svg>
+                            <th scope="col" class="px-3 lg:px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 cursor-pointer hover:text-slate-700 select-none" onclick="sortTable(5)">
+                                Fee Type <svg class="inline h-3 w-3 ml-0.5 opacity-40" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" /></svg>
                             </th>
-                            <th scope="col"
-                                class="px-3 lg:px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-slate-500 cursor-pointer hover:text-slate-700 select-none"
-                                onclick="sortTable(6)">
-                                Amount
-                                <svg class="inline h-3 w-3 ml-0.5 opacity-40" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" />
-                                </svg>
+                            <th scope="col" class="px-3 lg:px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-slate-500 cursor-pointer hover:text-slate-700 select-none" onclick="sortTable(6)">
+                                Amount <svg class="inline h-3 w-3 ml-0.5 opacity-40" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" /></svg>
                             </th>
-                            <th scope="col"
-                                class="px-3 lg:px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
-                                Tier
-                            </th>
-                            <th scope="col"
-                                class="px-3 lg:px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
-                                Section
-                            </th>
+                            <th scope="col" class="px-3 lg:px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Tier</th>
+                            <th scope="col" class="px-3 lg:px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Section</th>
+                            <th scope="col" class="px-3 lg:px-4 py-3 text-center text-xs font-medium uppercase tracking-wider text-slate-500 w-10">V3</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-200 bg-white" id="fee-table-body">
                         {% for fee in fees %}
-                        <tr class="{% if loop.index is odd %}bg-white{% else %}bg-slate-50{% endif %} hover:bg-blue-50 transition-colors">
+                        <tr class="fee-item {% if loop.index is odd %}bg-white{% else %}bg-slate-50{% endif %} hover:bg-blue-50 transition-colors"
+                            data-participant="{{ fee.participant_type.value }}"
+                            data-security="{{ fee.security_class.value }}"
+                            data-order="{{ fee.order_type.value }}"
+                            data-feetype="{{ fee.fee_type.value }}"
+                            data-search="{{ fee.fee_code or '' }} {{ fee.description or '' }} {{ fee.fee_name or '' }} {{ fee.section_ref or '' }}">
                             <td class="whitespace-nowrap px-3 lg:px-4 py-3 text-sm font-mono text-slate-600">
                                 {% if fee.fee_code %}
                                 <span class="inline-flex items-center rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-700">{{ fee.fee_code }}</span>
@@ -470,12 +555,74 @@
                             <td class="whitespace-nowrap px-3 lg:px-4 py-3 text-sm text-slate-400 max-w-[150px] truncate" title="{{ fee.section_ref or '' }}">
                                 {{ fee.section_ref or '' }}
                             </td>
+                            <td class="whitespace-nowrap px-3 lg:px-4 py-3 text-sm text-center">
+                                {% set has_v3 = fee.origin_code or fee.listing_type or fee.exec_venue or fee.liquidity_role or fee.fee_name or fee.product_type or fee.contra_origin_code or fee.penny_class or fee.auction_type or fee.auction_role or (fee.tier_level is not none) or fee.tier_condition_text %}
+                                {% if has_v3 %}
+                                <button type="button"
+                                        class="v3-toggle text-blue-500 hover:text-blue-700 transition-colors"
+                                        onclick="toggleV3Detail(this)"
+                                        title="Show V3 dimensions">
+                                    <svg class="h-4 w-4 v3-chevron transition-transform duration-150" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                                    </svg>
+                                </button>
+                                {% else %}
+                                <span class="text-slate-200">&mdash;</span>
+                                {% endif %}
+                            </td>
                         </tr>
+                        {% if has_v3 %}
+                        <tr class="v3-detail-row hidden">
+                            <td colspan="10" class="px-4 py-3 bg-slate-50/70 border-t-0">
+                                <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-x-6 gap-y-2 text-xs">
+                                    {% if fee.fee_name %}
+                                    <div class="col-span-2 lg:col-span-3"><span class="font-medium text-slate-500">Fee Name:</span> <span class="text-slate-800">{{ fee.fee_name }}</span></div>
+                                    {% endif %}
+                                    {% if fee.origin_code %}
+                                    <div><span class="font-medium text-slate-500">Origin:</span> <span class="text-slate-800">{{ fee.origin_code }}</span></div>
+                                    {% endif %}
+                                    {% if fee.contra_origin_code %}
+                                    <div><span class="font-medium text-slate-500">Contra Origin:</span> <span class="text-slate-800">{{ fee.contra_origin_code }}</span></div>
+                                    {% endif %}
+                                    {% if fee.product_type %}
+                                    <div><span class="font-medium text-slate-500">Product:</span> <span class="text-slate-800">{{ fee.product_type }}</span></div>
+                                    {% endif %}
+                                    {% if fee.listing_type %}
+                                    <div><span class="font-medium text-slate-500">Listing:</span> <span class="text-slate-800">{{ fee.listing_type }}</span></div>
+                                    {% endif %}
+                                    {% if fee.penny_class %}
+                                    <div><span class="font-medium text-slate-500">Penny Class:</span> <span class="text-slate-800">{{ fee.penny_class }}</span></div>
+                                    {% endif %}
+                                    {% if fee.multi_listed is not none %}
+                                    <div><span class="font-medium text-slate-500">Multi-Listed:</span> <span class="text-slate-800">{{ 'Yes' if fee.multi_listed else 'No' }}</span></div>
+                                    {% endif %}
+                                    {% if fee.exec_venue %}
+                                    <div><span class="font-medium text-slate-500">Exec Venue:</span> <span class="text-slate-800">{{ fee.exec_venue }}</span></div>
+                                    {% endif %}
+                                    {% if fee.liquidity_role %}
+                                    <div><span class="font-medium text-slate-500">Liquidity:</span> <span class="text-slate-800">{{ fee.liquidity_role }}</span></div>
+                                    {% endif %}
+                                    {% if fee.auction_type %}
+                                    <div><span class="font-medium text-slate-500">Auction Type:</span> <span class="text-slate-800">{{ fee.auction_type }}</span></div>
+                                    {% endif %}
+                                    {% if fee.auction_role %}
+                                    <div><span class="font-medium text-slate-500">Auction Role:</span> <span class="text-slate-800">{{ fee.auction_role }}</span></div>
+                                    {% endif %}
+                                    {% if fee.tier_level is not none %}
+                                    <div><span class="font-medium text-slate-500">V3 Tier:</span> <span class="text-slate-800">{{ fee.tier_level }}</span></div>
+                                    {% endif %}
+                                    {% if fee.tier_condition_text %}
+                                    <div class="col-span-2"><span class="font-medium text-slate-500">Condition:</span> <span class="text-slate-700">{{ fee.tier_condition_text }}</span></div>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% endif %}
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
-            <div class="px-4 sm:px-6 py-3 bg-slate-50 border-t border-slate-200 text-xs text-slate-500">
+            <div class="px-4 sm:px-6 py-3 bg-slate-50 border-t border-slate-200 text-xs text-slate-500" id="fee-footer">
                 {{ fees | length }} fee entries
             </div>
             {% else %}
@@ -540,19 +687,119 @@
     </div>
 </div>
 
-<!-- Tier details styling -->
+<!-- Styling -->
 <style>
     .tier-details summary::-webkit-details-marker { display: none; }
     .tier-details[open] .tier-chevron { transform: rotate(180deg); }
+    .v3-detail-row td { border-top: none !important; }
 </style>
 
-<!-- Client-side table sort (desktop only) -->
+<!-- Client-side: view toggle, filtering, sorting, V3 toggles -->
 <script>
+// --- View Toggle ---
+let currentView = 'table';
+
+function switchView(view) {
+    currentView = view;
+    const tableEl = document.getElementById('fee-table');
+    const cardsEl = document.getElementById('fee-cards');
+    const btnTable = document.getElementById('btn-table-view');
+    const btnCard = document.getElementById('btn-card-view');
+    if (!tableEl || !cardsEl) return;
+
+    if (view === 'table') {
+        tableEl.classList.remove('hidden');
+        cardsEl.classList.add('hidden');
+        btnTable.className = btnTable.className.replace('bg-white text-slate-600', '').replace('hover:bg-slate-100', '') + ' bg-blue-600 text-white';
+        btnCard.className = btnCard.className.replace('bg-blue-600 text-white', '') + ' bg-white text-slate-600 hover:bg-slate-100';
+    } else {
+        tableEl.classList.add('hidden');
+        cardsEl.classList.remove('hidden');
+        btnCard.className = btnCard.className.replace('bg-white text-slate-600', '').replace('hover:bg-slate-100', '') + ' bg-blue-600 text-white';
+        btnTable.className = btnTable.className.replace('bg-blue-600 text-white', '') + ' bg-white text-slate-600 hover:bg-slate-100';
+    }
+    applyFilters();
+}
+
+// --- Filtering ---
+function applyFilters() {
+    const participant = document.getElementById('filter-participant')?.value || '';
+    const security = document.getElementById('filter-security')?.value || '';
+    const order = document.getElementById('filter-order')?.value || '';
+    const feetype = document.getElementById('filter-feetype')?.value || '';
+    const search = (document.getElementById('filter-search')?.value || '').toLowerCase();
+
+    const allItems = document.querySelectorAll('.fee-item');
+    let shown = 0;
+    let total = allItems.length;
+
+    // For table view, also handle v3-detail-row visibility
+    allItems.forEach(item => {
+        const matchParticipant = !participant || item.dataset.participant === participant;
+        const matchSecurity = !security || item.dataset.security === security;
+        const matchOrder = !order || item.dataset.order === order;
+        const matchFeetype = !feetype || item.dataset.feetype === feetype;
+        const matchSearch = !search || (item.dataset.search || '').toLowerCase().includes(search);
+
+        const visible = matchParticipant && matchSecurity && matchOrder && matchFeetype && matchSearch;
+
+        if (item.tagName === 'TR') {
+            item.style.display = visible ? '' : 'none';
+            // Hide associated v3-detail-row
+            const next = item.nextElementSibling;
+            if (next && next.classList.contains('v3-detail-row')) {
+                next.style.display = visible ? '' : 'none';
+                if (!visible) next.classList.add('hidden');
+            }
+        } else {
+            item.style.display = visible ? '' : 'none';
+        }
+
+        if (visible) shown++;
+    });
+
+    // Halve total for table view since cards and table rows both have .fee-item
+    const actualTotal = total / 2;
+    const actualShown = shown / 2;
+
+    const countEl = document.getElementById('filter-count');
+    if (countEl) {
+        const hasFilter = participant || security || order || feetype || search;
+        if (hasFilter) {
+            countEl.textContent = `Showing ${Math.round(actualShown)} of ${Math.round(actualTotal)} fees`;
+        } else {
+            countEl.textContent = '';
+        }
+    }
+
+    // Update footer count
+    const footerEl = document.getElementById('fee-footer');
+    if (footerEl) {
+        const hasFilter = participant || security || order || feetype || search;
+        if (hasFilter) {
+            footerEl.textContent = `Showing ${Math.round(actualShown)} of ${Math.round(actualTotal)} fee entries`;
+        } else {
+            footerEl.textContent = `${Math.round(actualTotal)} fee entries`;
+        }
+    }
+}
+
+function clearFilters() {
+    ['filter-participant', 'filter-security', 'filter-order', 'filter-feetype'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+    const searchEl = document.getElementById('filter-search');
+    if (searchEl) searchEl.value = '';
+    applyFilters();
+}
+
+// --- Table Sorting ---
 let sortDirection = {};
 function sortTable(columnIndex) {
     const table = document.getElementById('fee-table-body');
     if (!table) return;
-    const rows = Array.from(table.querySelectorAll('tr'));
+    const rows = Array.from(table.querySelectorAll('tr:not(.v3-detail-row)'));
     const dir = sortDirection[columnIndex] = !sortDirection[columnIndex];
     rows.sort((a, b) => {
         const aText = a.cells[columnIndex].textContent.trim();
@@ -564,7 +811,38 @@ function sortTable(columnIndex) {
         }
         return dir ? aText.localeCompare(bText) : bText.localeCompare(aText);
     });
-    rows.forEach(row => table.appendChild(row));
+    rows.forEach(row => {
+        table.appendChild(row);
+        const next = row.nextElementSibling;
+        if (next && next.classList.contains('v3-detail-row')) {
+            table.appendChild(next);
+        }
+    });
+}
+
+// --- V3 Detail Row Toggle ---
+function toggleV3Detail(btn) {
+    const row = btn.closest('tr');
+    const detailRow = row.nextElementSibling;
+    if (detailRow && detailRow.classList.contains('v3-detail-row')) {
+        detailRow.classList.toggle('hidden');
+        btn.querySelector('.v3-chevron').classList.toggle('rotate-180');
+    }
+}
+
+let v3AllExpanded = false;
+function toggleAllV3() {
+    v3AllExpanded = !v3AllExpanded;
+    // Table view: toggle detail rows
+    document.querySelectorAll('.v3-detail-row').forEach(r => {
+        if (r.closest('tr')?.previousElementSibling?.style.display !== 'none') {
+            r.classList.toggle('hidden', !v3AllExpanded);
+        }
+    });
+    document.querySelectorAll('#fee-table .v3-chevron').forEach(c => c.classList.toggle('rotate-180', v3AllExpanded));
+    // Card view: toggle details
+    document.querySelectorAll('.v3-card-details').forEach(d => { d.open = v3AllExpanded; });
+    document.getElementById('v3-btn-label').textContent = v3AllExpanded ? 'Hide V3' : 'V3';
 }
 </script>
 {% endblock %}
