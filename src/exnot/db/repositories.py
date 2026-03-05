@@ -9,10 +9,16 @@ from exnot.db.models import (
     AgentEvent,
     AgentRun,
     AgentRunStatus,
+    BillingCode,
+    CanonicalFee,
+    DocumentCategory,
+    DocumentStatus,
     Exchange,
+    ExchangeDocument,
     ExchangeProfile,
     FeeChange,
     FeeScheduleSnapshot,
+    FeeType,
     NormalizedFee,
     ScrapedDocument,
     ScrapeLog,
@@ -348,3 +354,106 @@ class AgentEventRepository:
         stmt = select(AgentEvent).where(AgentEvent.run_id == run_id).order_by(AgentEvent.seq)
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
+
+
+class ExchangeDocumentRepository:
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def get_by_exchange(
+        self,
+        exchange_id: uuid.UUID,
+        category: DocumentCategory | None = None,
+        status: DocumentStatus | None = None,
+    ) -> list[ExchangeDocument]:
+        stmt = select(ExchangeDocument).where(ExchangeDocument.exchange_id == exchange_id)
+        if category:
+            stmt = stmt.where(ExchangeDocument.doc_category == category)
+        if status:
+            stmt = stmt.where(ExchangeDocument.status == status)
+        stmt = stmt.order_by(
+            ExchangeDocument.is_pinned.desc(),
+            ExchangeDocument.is_primary.desc(),
+            ExchangeDocument.discovered_at.desc(),
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def get_approved_for_exchange(
+        self, exchange_id: uuid.UUID, category: DocumentCategory | None = None
+    ) -> list[ExchangeDocument]:
+        return await self.get_by_exchange(exchange_id, category=category, status=DocumentStatus.APPROVED)
+
+    async def get_pinned_for_exchange(self, exchange_id: uuid.UUID) -> list[ExchangeDocument]:
+        stmt = (
+            select(ExchangeDocument)
+            .where(
+                ExchangeDocument.exchange_id == exchange_id,
+                ExchangeDocument.is_pinned == True,  # noqa: E712
+                ExchangeDocument.status == DocumentStatus.APPROVED,
+            )
+            .order_by(ExchangeDocument.is_primary.desc())
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def get_pending_review(self, exchange_id: uuid.UUID | None = None) -> list[ExchangeDocument]:
+        stmt = select(ExchangeDocument).where(ExchangeDocument.status == DocumentStatus.CLASSIFIED)
+        if exchange_id:
+            stmt = stmt.where(ExchangeDocument.exchange_id == exchange_id)
+        stmt = stmt.order_by(ExchangeDocument.discovered_at.desc())
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def get_by_url(self, exchange_id: uuid.UUID, source_url: str) -> ExchangeDocument | None:
+        stmt = select(ExchangeDocument).where(
+            ExchangeDocument.exchange_id == exchange_id,
+            ExchangeDocument.source_url == source_url,
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def create(self, doc: ExchangeDocument) -> ExchangeDocument:
+        self.session.add(doc)
+        await self.session.flush()
+        return doc
+
+    async def update_status(
+        self,
+        doc_id: uuid.UUID,
+        status: DocumentStatus,
+        approved_by: uuid.UUID | None = None,
+        admin_notes: str | None = None,
+    ) -> ExchangeDocument | None:
+        stmt = select(ExchangeDocument).where(ExchangeDocument.id == doc_id)
+        result = await self.session.execute(stmt)
+        doc = result.scalar_one_or_none()
+        if doc:
+            doc.status = status
+            if status == DocumentStatus.APPROVED and approved_by:
+                doc.approved_at = datetime.utcnow()
+                doc.approved_by = approved_by
+            if admin_notes is not None:
+                doc.admin_notes = admin_notes
+            await self.session.flush()
+        return doc
+
+    async def upsert_by_url(
+        self,
+        exchange_id: uuid.UUID,
+        source_url: str,
+        defaults: dict,
+    ) -> tuple[ExchangeDocument, bool]:
+        """Insert or update by exchange_id+source_url. Returns (doc, created)."""
+        existing = await self.get_by_url(exchange_id, source_url)
+        if existing:
+            for key, val in defaults.items():
+                if hasattr(existing, key):
+                    setattr(existing, key, val)
+            existing.last_seen_at = datetime.utcnow()
+            await self.session.flush()
+            return existing, False
+        doc = ExchangeDocument(exchange_id=exchange_id, source_url=source_url, **defaults)
+        self.session.add(doc)
+        await self.session.flush()
+        return doc, True
