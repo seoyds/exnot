@@ -19,6 +19,8 @@ from exnot.db.engine import AsyncSessionLocal, get_db
 from exnot.db.models import (
     AgentRunStatus,
     ChangeType,
+    DocumentStatus,
+    ExchangeDocument,
     FeeType,
     NormalizedFee,
     NotificationFrequency,
@@ -31,6 +33,7 @@ from exnot.db.models import (
 from exnot.db.repositories import (
     AgentEventRepository,
     AgentRunRepository,
+    ExchangeDocumentRepository,
     ExchangeRepository,
     FeeChangeRepository,
     NormalizedFeeRepository,
@@ -906,5 +909,224 @@ async def monitor_stop_all(
 
     return RedirectResponse(
         url=f"/dashboard/monitor?success=Cancelled+{cancelled_count}+run(s)",
+        status_code=303,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Exchange documents review
+# ---------------------------------------------------------------------------
+
+
+@router.get("/dashboard/exchanges/{code}/documents", response_class=HTMLResponse)
+async def exchange_documents(
+    request: Request,
+    code: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Document review page for an exchange showing all discovered documents."""
+    user = await _get_current_user_from_cookie(request, db)
+    exchange_repo = ExchangeRepository(db)
+    doc_repo = ExchangeDocumentRepository(db)
+
+    exchange = await exchange_repo.get_by_code(code.upper())
+    if not exchange:
+        return RedirectResponse("/dashboard", status_code=302)
+
+    documents = await doc_repo.get_by_exchange(exchange.id)
+
+    return templates.TemplateResponse(
+        "documents.html",
+        {
+            "request": request,
+            "exchange": exchange,
+            "documents": documents,
+            "user": user,
+            "success": request.query_params.get("success"),
+            "error": request.query_params.get("error"),
+        },
+    )
+
+
+@router.post("/dashboard/exchanges/{code}/documents/{doc_id}/approve")
+async def approve_document(
+    code: str,
+    doc_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Approve a discovered document (admin-only)."""
+    import uuid as _uuid
+
+    user = await _get_current_user_from_cookie(request, db)
+    if not user or not user.is_admin:
+        return RedirectResponse(
+            url=f"/dashboard/exchanges/{code}/documents?error=Admin+login+required",
+            status_code=303,
+        )
+
+    try:
+        parsed_id = _uuid.UUID(doc_id)
+    except ValueError:
+        return RedirectResponse(
+            url=f"/dashboard/exchanges/{code}/documents?error=Invalid+document+ID",
+            status_code=303,
+        )
+
+    doc_repo = ExchangeDocumentRepository(db)
+    await doc_repo.update_status(parsed_id, DocumentStatus.APPROVED, approved_by=user.id)
+    await db.commit()
+
+    return RedirectResponse(
+        url=f"/dashboard/exchanges/{code}/documents?success=Document+approved",
+        status_code=303,
+    )
+
+
+@router.post("/dashboard/exchanges/{code}/documents/{doc_id}/approve-pin")
+async def approve_and_pin_document(
+    code: str,
+    doc_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Approve and pin a document, deriving a URL pattern (admin-only)."""
+    import uuid as _uuid
+
+    from exnot.discovery.url_patterns import derive_url_pattern
+
+    user = await _get_current_user_from_cookie(request, db)
+    if not user or not user.is_admin:
+        return RedirectResponse(
+            url=f"/dashboard/exchanges/{code}/documents?error=Admin+login+required",
+            status_code=303,
+        )
+
+    try:
+        parsed_id = _uuid.UUID(doc_id)
+    except ValueError:
+        return RedirectResponse(
+            url=f"/dashboard/exchanges/{code}/documents?error=Invalid+document+ID",
+            status_code=303,
+        )
+
+    doc_repo = ExchangeDocumentRepository(db)
+    doc = await doc_repo.update_status(parsed_id, DocumentStatus.APPROVED, approved_by=user.id)
+    if doc:
+        doc.is_pinned = True
+        doc.url_pattern = derive_url_pattern(doc.source_url)
+        await db.commit()
+
+    return RedirectResponse(
+        url=f"/dashboard/exchanges/{code}/documents?success=Document+approved+and+pinned",
+        status_code=303,
+    )
+
+
+@router.post("/dashboard/exchanges/{code}/documents/{doc_id}/reject")
+async def reject_document(
+    code: str,
+    doc_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Reject a discovered document (admin-only)."""
+    import uuid as _uuid
+
+    user = await _get_current_user_from_cookie(request, db)
+    if not user or not user.is_admin:
+        return RedirectResponse(
+            url=f"/dashboard/exchanges/{code}/documents?error=Admin+login+required",
+            status_code=303,
+        )
+
+    try:
+        parsed_id = _uuid.UUID(doc_id)
+    except ValueError:
+        return RedirectResponse(
+            url=f"/dashboard/exchanges/{code}/documents?error=Invalid+document+ID",
+            status_code=303,
+        )
+
+    doc_repo = ExchangeDocumentRepository(db)
+    await doc_repo.update_status(parsed_id, DocumentStatus.REJECTED, approved_by=user.id)
+    await db.commit()
+
+    return RedirectResponse(
+        url=f"/dashboard/exchanges/{code}/documents?success=Document+rejected",
+        status_code=303,
+    )
+
+
+@router.post("/dashboard/exchanges/{code}/documents/{doc_id}/pin")
+async def pin_document(
+    code: str,
+    doc_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Pin a document so it persists across discovery runs (admin-only)."""
+    import uuid as _uuid
+
+    user = await _get_current_user_from_cookie(request, db)
+    if not user or not user.is_admin:
+        return RedirectResponse(
+            url=f"/dashboard/exchanges/{code}/documents?error=Admin+login+required",
+            status_code=303,
+        )
+
+    try:
+        parsed_id = _uuid.UUID(doc_id)
+    except ValueError:
+        return RedirectResponse(
+            url=f"/dashboard/exchanges/{code}/documents?error=Invalid+document+ID",
+            status_code=303,
+        )
+
+    doc_repo = ExchangeDocumentRepository(db)
+    doc = await doc_repo.get_by_id(parsed_id)
+    if doc:
+        doc.is_pinned = True
+        await db.commit()
+
+    return RedirectResponse(
+        url=f"/dashboard/exchanges/{code}/documents?success=Document+pinned",
+        status_code=303,
+    )
+
+
+@router.post("/dashboard/exchanges/{code}/documents/{doc_id}/unpin")
+async def unpin_document(
+    code: str,
+    doc_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Unpin a document (admin-only)."""
+    import uuid as _uuid
+
+    user = await _get_current_user_from_cookie(request, db)
+    if not user or not user.is_admin:
+        return RedirectResponse(
+            url=f"/dashboard/exchanges/{code}/documents?error=Admin+login+required",
+            status_code=303,
+        )
+
+    try:
+        parsed_id = _uuid.UUID(doc_id)
+    except ValueError:
+        return RedirectResponse(
+            url=f"/dashboard/exchanges/{code}/documents?error=Invalid+document+ID",
+            status_code=303,
+        )
+
+    doc_repo = ExchangeDocumentRepository(db)
+    doc = await doc_repo.get_by_id(parsed_id)
+    if doc:
+        doc.is_pinned = False
+        await db.commit()
+
+    return RedirectResponse(
+        url=f"/dashboard/exchanges/{code}/documents?success=Document+unpinned",
         status_code=303,
     )

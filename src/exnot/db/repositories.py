@@ -405,6 +405,11 @@ class ExchangeDocumentRepository:
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+    async def get_by_id(self, doc_id: uuid.UUID) -> ExchangeDocument | None:
+        stmt = select(ExchangeDocument).where(ExchangeDocument.id == doc_id)
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def get_by_url(self, exchange_id: uuid.UUID, source_url: str) -> ExchangeDocument | None:
         stmt = select(ExchangeDocument).where(
             ExchangeDocument.exchange_id == exchange_id,
