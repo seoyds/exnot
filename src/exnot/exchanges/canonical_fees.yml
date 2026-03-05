@@ -1,0 +1,162 @@
+fees:
+  - canonical_code: MAKER_REBATE
+    display_name: Maker Rebate
+    fee_type: MAKER
+    category: transaction
+    description: Rebate paid for adding liquidity (posting resting orders)
+
+  - canonical_code: MAKER_FEE
+    display_name: Maker Fee
+    fee_type: MAKER
+    category: transaction
+    description: Fee charged for adding liquidity on maker-taker exchanges with inverted pricing
+
+  - canonical_code: TAKER_FEE
+    display_name: Taker Fee
+    fee_type: TAKER
+    category: transaction
+    description: Fee charged for removing liquidity (taking resting orders)
+
+  - canonical_code: TAKER_REBATE
+    display_name: Taker Rebate
+    fee_type: TAKER
+    category: transaction
+    description: Rebate paid for removing liquidity on inverted-pricing exchanges
+
+  - canonical_code: ROUTING_FEE
+    display_name: Routing Fee
+    fee_type: ROUTING
+    category: routing
+    description: Fee for routing orders to other exchanges
+
+  - canonical_code: ROUTING_REBATE
+    display_name: Routing Rebate
+    fee_type: ROUTING
+    category: routing
+    description: Rebate received when routed orders add liquidity at away markets
+
+  - canonical_code: OPTIONS_REGULATORY_FEE
+    display_name: Options Regulatory Fee (ORF)
+    fee_type: ORF
+    category: regulatory
+    description: Per-contract fee collected by exchanges on behalf of regulators
+
+  - canonical_code: TRANSACTION_FEE
+    display_name: Transaction Fee
+    fee_type: TRANSACTION
+    category: transaction
+    description: General per-contract transaction fee
+
+  - canonical_code: CLEARING_FEE
+    display_name: Clearing Fee
+    fee_type: CLEARING
+    category: clearing
+    description: Fee charged by the clearing house for trade settlement
+
+  - canonical_code: CROSSING_FEE
+    display_name: Crossing Fee
+    fee_type: CROSSING_FEE
+    category: auction
+    description: Fee for crossing orders in price improvement or facilitation mechanisms
+
+  - canonical_code: PIM_FEE
+    display_name: Price Improvement Mechanism Fee
+    fee_type: PIM_FEE
+    category: auction
+    description: Fee charged for orders submitted to the Price Improvement Mechanism
+
+  - canonical_code: PIM_REBATE
+    display_name: Price Improvement Mechanism Rebate
+    fee_type: PIM_FEE
+    category: auction
+    description: Rebate for responses that provide price improvement in PIM auctions
+
+  - canonical_code: RESPONSE_FEE
+    display_name: Auction Response Fee
+    fee_type: RESPONSE_FEE
+    category: auction
+    description: Fee charged for responding to auction or solicitation mechanisms
+
+  - canonical_code: BREAK_UP_REBATE
+    display_name: Break-Up Rebate
+    fee_type: BREAK_UP_REBATE
+    category: auction
+    description: Rebate paid when a competing order breaks up a facilitation or solicitation
+
+  - canonical_code: SURCHARGE
+    display_name: Surcharge
+    fee_type: SURCHARGE
+    category: surcharge
+    description: Additional per-contract surcharge applied to certain order types or classes
+
+  - canonical_code: INDEX_SURCHARGE
+    display_name: Index Surcharge
+    fee_type: SURCHARGE
+    category: surcharge
+    description: Surcharge applied to index options transactions
+
+  - canonical_code: COMPLEX_SURCHARGE
+    display_name: Complex Order Surcharge
+    fee_type: SURCHARGE
+    category: surcharge
+    description: Surcharge applied to complex (multi-leg) order executions
+
+  - canonical_code: CONNECTIVITY_FEE
+    display_name: Connectivity Fee
+    fee_type: CONNECTIVITY
+    category: connectivity
+    description: Monthly fee for physical or logical exchange port connections
+
+  - canonical_code: MARKET_DATA_FEE
+    display_name: Market Data Fee
+    fee_type: MARKET_DATA
+    category: market_data
+    description: Fee for receiving real-time market data feeds from the exchange
+
+  - canonical_code: MEMBERSHIP_FEE
+    display_name: Membership Fee
+    fee_type: MEMBERSHIP
+    category: membership
+    description: Monthly or annual fee for exchange membership or trading permit
+
+  - canonical_code: CANCELLATION_FEE
+    display_name: Cancellation Fee
+    fee_type: CANCELLATION
+    category: cancellation
+    description: Fee charged for excessive order cancellations relative to executions
+
+  - canonical_code: STOCK_HANDLING_FEE
+    display_name: Stock Handling Fee
+    fee_type: STOCK_HANDLING
+    category: execution
+    description: Fee for handling the stock leg of an options exercise or assignment
+
+  - canonical_code: COMPLEX_MAKER_REBATE
+    display_name: Complex Order Maker Rebate
+    fee_type: MAKER
+    category: transaction
+    description: Rebate for adding liquidity via complex (multi-leg) orders
+
+  - canonical_code: COMPLEX_TAKER_FEE
+    display_name: Complex Order Taker Fee
+    fee_type: TAKER
+    category: transaction
+    description: Fee for removing liquidity via complex (multi-leg) orders
+
+  - canonical_code: DIRECTED_ORDER_FEE
+    display_name: Directed Order Fee
+    fee_type: TAKER
+    category: transaction
+    description: Fee for orders directed to a specific market maker
+
+  - canonical_code: QCC_FEE
+    display_name: Qualified Contingent Cross Fee
+    fee_type: CROSSING_FEE
+    category: auction
+    description: Fee for Qualified Contingent Cross transactions pairing options with stock
+
+  - canonical_code: FLEX_FEE
+    display_name: FLEX Options Fee
+    fee_type: TRANSACTION
+    category: transaction
+    description: Fee for trading FLEX (customizable terms) options contracts
