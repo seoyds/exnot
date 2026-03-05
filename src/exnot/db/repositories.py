@@ -457,3 +457,77 @@ class ExchangeDocumentRepository:
         self.session.add(doc)
         await self.session.flush()
         return doc, True
+
+
+class CanonicalFeeRepository:
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def get_all(self) -> list[CanonicalFee]:
+        stmt = select(CanonicalFee).order_by(CanonicalFee.category, CanonicalFee.canonical_code)
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def get_by_code(self, canonical_code: str) -> CanonicalFee | None:
+        stmt = select(CanonicalFee).where(CanonicalFee.canonical_code == canonical_code)
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def get_by_id(self, fee_id: int) -> CanonicalFee | None:
+        stmt = select(CanonicalFee).where(CanonicalFee.id == fee_id)
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def seed_from_yaml(self, yaml_path: str) -> int:
+        """Load canonical fees from YAML, upsert by canonical_code. Returns count of new entries."""
+        import yaml
+        from pathlib import Path
+
+        data = yaml.safe_load(Path(yaml_path).read_text())
+        created = 0
+        for entry in data["fees"]:
+            existing = await self.get_by_code(entry["canonical_code"])
+            if not existing:
+                fee = CanonicalFee(
+                    canonical_code=entry["canonical_code"],
+                    display_name=entry["display_name"],
+                    fee_type=FeeType[entry["fee_type"]],
+                    description=entry.get("description"),
+                    category=entry.get("category"),
+                )
+                self.session.add(fee)
+                created += 1
+        await self.session.flush()
+        return created
+
+
+class BillingCodeRepository:
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def get_by_exchange(self, exchange_id: uuid.UUID) -> list[BillingCode]:
+        stmt = (
+            select(BillingCode)
+            .where(BillingCode.exchange_id == exchange_id)
+            .order_by(BillingCode.code)
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def upsert(self, exchange_id: uuid.UUID, code: str, defaults: dict) -> tuple[BillingCode, bool]:
+        stmt = select(BillingCode).where(
+            BillingCode.exchange_id == exchange_id,
+            BillingCode.code == code,
+        )
+        result = await self.session.execute(stmt)
+        existing = result.scalar_one_or_none()
+        if existing:
+            for key, val in defaults.items():
+                if hasattr(existing, key):
+                    setattr(existing, key, val)
+            await self.session.flush()
+            return existing, False
+        billing_code = BillingCode(exchange_id=exchange_id, code=code, **defaults)
+        self.session.add(billing_code)
+        await self.session.flush()
+        return billing_code, True
