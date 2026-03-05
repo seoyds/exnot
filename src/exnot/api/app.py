@@ -111,3 +111,18 @@ async def startup_event():
                 logging.getLogger(__name__).info("Admin user created")
     except Exception as e:
         logging.getLogger(__name__).warning(f"Could not create admin user on startup: {e}")
+
+    # Seed canonical fees from YAML
+    try:
+        from exnot.db.repositories import CanonicalFeeRepository
+
+        canonical_fees_path = Path(__file__).parent.parent / "exchanges" / "canonical_fees.yml"
+        if canonical_fees_path.exists():
+            async with AsyncSessionLocal() as session:
+                repo = CanonicalFeeRepository(session)
+                count = await repo.seed_from_yaml(str(canonical_fees_path))
+                if count:
+                    await session.commit()
+                    logging.getLogger(__name__).info(f"Seeded {count} new canonical fees")
+    except Exception as e:
+        logging.getLogger(__name__).warning(f"Could not seed canonical fees on startup: {e}")

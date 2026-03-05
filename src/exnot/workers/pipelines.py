@@ -353,6 +353,12 @@ def run_scrape_pipeline(
             except Exception:
                 pass
 
+        # --- Step (k): Process protocol specs for billing code extraction ---
+        try:
+            _process_protocol_specs(exchange, session, emitter=emitter)
+        except Exception as e:
+            logger.warning(f"[{exchange_code}] Protocol spec processing failed (non-fatal): {e}")
+
         # Record scrape log
         _record_scrape_log(
             exchange,
@@ -790,6 +796,90 @@ def _save_fee_changes(
     session.flush()
     logger.info(f"[{exchange.code}] Saved {len(db_changes)} fee change records")
     return db_changes
+
+
+def _process_protocol_specs(exchange, session, emitter=None):
+    """Process approved protocol spec documents to extract billing codes."""
+    from exnot.ai.agents.protocol_extractor import protocol_extractor_agent
+    from exnot.ai.deps import DiscoveryDeps
+    from exnot.ai.models import get_model
+    from exnot.config import get_settings
+    from exnot.db.models import (
+        BillingCode,
+        BillingProtocol,
+        DocumentCategory,
+        DocumentStatus,
+        ExchangeDocument,
+    )
+
+    settings = get_settings()
+
+    protocol_docs = (
+        session.query(ExchangeDocument)
+        .filter_by(
+            exchange_id=exchange.id,
+            doc_category=DocumentCategory.PROTOCOL_SPEC,
+            status=DocumentStatus.APPROVED,
+        )
+        .all()
+    )
+
+    if not protocol_docs:
+        return
+
+    model = get_model(settings.ai_model_protocol_extraction)
+
+    for doc in protocol_docs:
+        try:
+            # Fetch document content
+            import httpx
+
+            async def _fetch():
+                async with httpx.AsyncClient(timeout=30) as client:
+                    resp = await client.get(doc.source_url)
+                    resp.raise_for_status()
+                    return resp.text[:15000]  # Limit to 15K chars
+
+            text = asyncio.run(_fetch())
+            if not text:
+                continue
+
+            deps = DiscoveryDeps(
+                exchange_code=exchange.code,
+                exchange_name=exchange.name,
+                operator=exchange.operator,
+            )
+
+            async def _extract():
+                return await protocol_extractor_agent.run(text, model=model, deps=deps)
+
+            result = asyncio.run(_extract())
+
+            # Save billing codes
+            for bc in result.output.billing_codes:
+                existing = session.query(BillingCode).filter_by(
+                    exchange_id=exchange.id, code=bc.code
+                ).first()
+                if not existing:
+                    protocol = BillingProtocol.OTHER
+                    if bc.protocol in BillingProtocol.__members__:
+                        protocol = BillingProtocol[bc.protocol]
+                    billing_code = BillingCode(
+                        exchange_id=exchange.id,
+                        code=bc.code,
+                        protocol=protocol,
+                        description=bc.description,
+                        source_document_id=doc.id,
+                        tag_number=bc.tag_number,
+                    )
+                    session.add(billing_code)
+
+            session.flush()
+
+        except Exception as e:
+            if emitter:
+                emitter.emit_error(f"Protocol spec processing failed for {doc.source_url}: {e}")
+            logger.warning(f"[{exchange.code}] Protocol spec processing failed for {doc.source_url}: {e}")
 
 
 def _record_scrape_log(
