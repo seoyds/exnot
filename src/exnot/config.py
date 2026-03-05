@@ -69,6 +69,10 @@ class Settings(BaseSettings):
     ai_model_correction: str = "qwen/qwen3.5-flash"
     ai_model_url_discovery: str = "qwen/qwen3.5-flash"
     ai_model_change_summary: str = "qwen/qwen3.5-flash"
+    ai_model_doc_classification: str = "qwen/qwen3.5-flash"
+    doc_auto_approve_threshold: float = 0.9
+    discovery_include_protocol_specs: bool = True
+    ai_model_protocol_extraction: str = "qwen/qwen3.5-flash"
 
     # Budget guardrails
     ai_budget_per_exchange_usd: float = 1.00

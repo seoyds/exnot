@@ -177,3 +177,11 @@ class ChangeSummary(BaseModel):
     summary: str = ""
     impact_level: str = "LOW"  # HIGH | MEDIUM | LOW
     key_changes: list[str] = Field(default_factory=list)
+
+
+class DocumentClassificationResult(BaseModel):
+    """AI classification of a discovered document."""
+
+    doc_category: str  # One of DocumentCategory values
+    confidence: float
+    reasoning: str
