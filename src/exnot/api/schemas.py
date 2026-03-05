@@ -56,6 +56,21 @@ class NormalizedFeeResponse(BaseModel):
     tier_threshold_pct: float | None = None
     tier_threshold_contracts: int | None = None
 
+    # V3 dimensions
+    origin_code: str | None = None
+    contra_origin_code: str | None = None
+    product_type: str | None = None
+    listing_type: str | None = None
+    penny_class: str | None = None
+    multi_listed: bool | None = None
+    exec_venue: str | None = None
+    liquidity_role: str | None = None
+    auction_type: str | None = None
+    auction_role: str | None = None
+    fee_name: str | None = None
+    tier_level: int | None = None
+    tier_condition_text: str | None = None
+
     model_config = {"from_attributes": True}
 
     @classmethod
@@ -84,6 +99,19 @@ class NormalizedFeeResponse(BaseModel):
             volume_tier=fee.volume_tier,
             tier_threshold_pct=fee.tier_threshold_pct,
             tier_threshold_contracts=fee.tier_threshold_contracts,
+            origin_code=fee.origin_code,
+            contra_origin_code=fee.contra_origin_code,
+            product_type=fee.product_type,
+            listing_type=fee.listing_type,
+            penny_class=fee.penny_class,
+            multi_listed=fee.multi_listed,
+            exec_venue=fee.exec_venue,
+            liquidity_role=fee.liquidity_role,
+            auction_type=fee.auction_type,
+            auction_role=fee.auction_role,
+            fee_name=fee.fee_name,
+            tier_level=fee.tier_level,
+            tier_condition_text=fee.tier_condition_text,
         )
 
 

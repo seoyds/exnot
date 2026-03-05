@@ -3,12 +3,12 @@
 {% block title %}Agent Monitor{% endblock %}
 
 {% block header %}
-<header class="bg-white shadow-sm">
+<header class="bg-white dark:bg-slate-900 shadow-sm dark:shadow-slate-800/50">
     <div class="mx-auto max-w-7xl px-4 py-4 sm:py-6 sm:px-6 lg:px-8">
         <div class="flex items-center justify-between">
             <div>
-                <h1 class="text-xl sm:text-3xl font-bold tracking-tight text-slate-900">Agent Monitor</h1>
-                <p class="mt-1 text-xs sm:text-sm text-slate-500">Real-time monitoring of AI extraction pipeline runs.</p>
+                <h1 class="text-xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Agent Monitor</h1>
+                <p class="mt-1 text-xs sm:text-sm text-slate-500 dark:text-slate-400">Real-time monitoring of AI extraction pipeline runs.</p>
             </div>
             <div id="stop-all-btn" class="{% if not runs or not runs|selectattr('status', 'equalto', 'RUNNING')|list %}hidden{% endif %}">
                 <form method="post" action="/dashboard/monitor/stop-all"
@@ -29,77 +29,82 @@
 
 {% block content %}
 {% if success %}
-<div class="mb-4 sm:mb-6 rounded-lg bg-green-50 border border-green-200 p-3 sm:p-4">
+<div class="mb-4 sm:mb-6 rounded-lg bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 p-3 sm:p-4">
     <div class="flex">
         <svg class="h-5 w-5 text-green-400 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
             <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd" />
         </svg>
         <div class="ml-3">
-            <p class="text-sm font-medium text-green-800">{{ success }}</p>
+            <p class="text-sm font-medium text-green-800 dark:text-green-200">{{ success }}</p>
         </div>
     </div>
 </div>
 {% endif %}
 {% if error %}
-<div class="mb-4 sm:mb-6 rounded-lg bg-red-50 border border-red-200 p-3 sm:p-4">
+<div class="mb-4 sm:mb-6 rounded-lg bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 p-3 sm:p-4">
     <div class="flex">
         <svg class="h-5 w-5 text-red-400 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
             <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clip-rule="evenodd" />
         </svg>
         <div class="ml-3">
-            <h3 class="text-sm font-medium text-red-800">Error</h3>
-            <p class="mt-1 text-sm text-red-700">{{ error }}</p>
+            <h3 class="text-sm font-medium text-red-800 dark:text-red-200">Error</h3>
+            <p class="mt-1 text-sm text-red-700 dark:text-red-300">{{ error }}</p>
         </div>
     </div>
 </div>
 {% endif %}
 
-<div class="flex gap-4" style="height: calc(100vh - 280px); min-height: 400px;">
-    <!-- Left panel: Run list -->
-    <div class="w-80 flex-shrink-0 overflow-y-auto rounded-lg bg-white shadow-sm border border-slate-200">
-        <div class="sticky top-0 bg-white border-b border-slate-200 px-4 py-3">
-            <h2 class="text-sm font-semibold text-slate-700 uppercase tracking-wider">Runs</h2>
+<!-- Mobile: stacked layout. Desktop: side-by-side -->
+<div class="flex flex-col lg:flex-row gap-4" style="min-height: 400px;">
+
+    <!-- Run list panel -->
+    <div id="run-list-panel"
+         class="w-full lg:w-80 flex-shrink-0 rounded-lg bg-white dark:bg-slate-900 shadow-sm border border-slate-200 dark:border-slate-700
+                overflow-y-auto max-h-[50vh] lg:max-h-none"
+         style="lg:height: calc(100vh - 280px);">
+        <div class="sticky top-0 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 px-4 py-3 z-10">
+            <h2 class="text-sm font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Runs</h2>
         </div>
-        <div class="divide-y divide-slate-100" id="run-list">
+        <div class="divide-y divide-slate-100 dark:divide-slate-800" id="run-list">
             {% if runs %}
             {% for run in runs %}
             <div id="run-card-{{ run.id }}"
-                 class="px-4 py-3 cursor-pointer hover:bg-slate-50 transition-colors"
+                 class="px-4 py-3 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors active:bg-slate-100 dark:active:bg-slate-700"
                  onclick="selectRun('{{ run.id }}')">
                 <div class="flex items-center justify-between mb-1">
-                    <span class="text-sm font-semibold text-slate-900">
+                    <span class="text-sm font-semibold text-slate-900 dark:text-slate-100">
                         {{ run.exchange.code if run.exchange else 'N/A' }}
                     </span>
                     {% if run.status.value == 'RUNNING' %}
-                    <span class="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-800">
+                    <span class="inline-flex items-center rounded-full bg-blue-100 dark:bg-blue-900/50 px-2 py-0.5 text-[10px] font-medium text-blue-800 dark:text-blue-300">
                         <span class="mr-1 h-1.5 w-1.5 rounded-full bg-blue-500 inline-block animate-pulse"></span>
                         RUNNING
                     </span>
                     {% elif run.status.value == 'COMPLETED' %}
-                    <span class="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-medium text-green-800">
+                    <span class="inline-flex items-center rounded-full bg-green-100 dark:bg-green-900/50 px-2 py-0.5 text-[10px] font-medium text-green-800 dark:text-green-300">
                         <span class="mr-1 h-1.5 w-1.5 rounded-full bg-green-500 inline-block"></span>
                         COMPLETED
                     </span>
                     {% elif run.status.value == 'FAILED' %}
-                    <span class="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-800">
+                    <span class="inline-flex items-center rounded-full bg-red-100 dark:bg-red-900/50 px-2 py-0.5 text-[10px] font-medium text-red-800 dark:text-red-300">
                         <span class="mr-1 h-1.5 w-1.5 rounded-full bg-red-500 inline-block"></span>
                         FAILED
                     </span>
                     {% elif run.status.value == 'CANCELLED' %}
-                    <span class="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
+                    <span class="inline-flex items-center rounded-full bg-slate-100 dark:bg-slate-700 px-2 py-0.5 text-[10px] font-medium text-slate-600 dark:text-slate-300">
                         <span class="mr-1 h-1.5 w-1.5 rounded-full bg-slate-400 inline-block"></span>
                         CANCELLED
                     </span>
                     {% endif %}
                 </div>
-                <div class="flex items-center justify-between text-xs text-slate-500">
+                <div class="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
                     <span>{{ run.started_at.strftime('%m/%d %H:%M') if run.started_at else 'N/A' }}</span>
                     <div class="flex items-center gap-2">
                         {% if run.total_cost_usd %}
                         <span class="font-mono">${{ '%.4f' % run.total_cost_usd }}</span>
                         {% endif %}
                         {% if run.total_input_tokens or run.total_output_tokens %}
-                        <span class="text-slate-400">{{ (run.total_input_tokens or 0) + (run.total_output_tokens or 0) }} tok</span>
+                        <span class="text-slate-400 dark:text-slate-500">{{ (run.total_input_tokens or 0) + (run.total_output_tokens or 0) }} tok</span>
                         {% endif %}
                     </div>
                 </div>
@@ -109,7 +114,7 @@
                           onclick="event.stopPropagation();"
                           onsubmit="return confirm('Stop this run?');">
                         <button type="submit"
-                                class="inline-flex items-center gap-1 rounded bg-red-50 border border-red-200 px-2 py-0.5 text-xs font-medium text-red-700 hover:bg-red-100 transition-colors">
+                                class="inline-flex items-center gap-1 rounded bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 px-2 py-0.5 text-xs font-medium text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors">
                             <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 7.5A2.25 2.25 0 017.5 5.25h9a2.25 2.25 0 012.25 2.25v9a2.25 2.25 0 01-2.25 2.25h-9a2.25 2.25 0 01-2.25-2.25v-9z" />
                             </svg>
@@ -121,20 +126,29 @@
             </div>
             {% endfor %}
             {% else %}
-            <div class="px-4 py-8 text-center text-sm text-slate-400">
+            <div class="px-4 py-8 text-center text-sm text-slate-400 dark:text-slate-500">
                 No agent runs recorded yet.
             </div>
             {% endif %}
         </div>
     </div>
 
-    <!-- Right panel: Run detail -->
-    <div class="flex-1 flex flex-col rounded-lg bg-white shadow-sm border border-slate-200 overflow-hidden">
-        <div id="run-detail-header" class="border-b border-slate-200 px-4 py-3 bg-slate-50">
-            <p class="text-sm text-slate-500">Select a run from the list to view its events.</p>
+    <!-- Event detail panel -->
+    <div id="run-detail-panel"
+         class="hidden lg:flex flex-1 flex-col rounded-lg bg-white dark:bg-slate-900 shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden"
+         style="min-height: 300px; max-height: calc(100vh - 280px);">
+        <div id="run-detail-header" class="border-b border-slate-200 dark:border-slate-700 px-4 py-3 bg-slate-50 dark:bg-slate-800/50 flex items-center justify-between">
+            <p class="text-sm text-slate-500 dark:text-slate-400">Select a run to view events.</p>
+            <button id="back-to-runs-btn" class="lg:hidden inline-flex items-center gap-1 text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
+                    onclick="showRunList()">
+                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+                </svg>
+                Back
+            </button>
         </div>
-        <div id="run-event-log" class="flex-1 overflow-y-auto p-4 space-y-2">
-            <!-- Events will be loaded here -->
+        <div id="run-event-log" class="flex-1 overflow-y-auto p-3 sm:p-4 space-y-2 overscroll-contain"
+             style="-webkit-overflow-scrolling: touch;">
         </div>
     </div>
 </div>
@@ -142,26 +156,37 @@
 <script>
     let currentRunId = null;
     let eventSource = null;
+    const isDark = () => document.documentElement.classList.contains('dark');
 
     function selectRun(runId) {
-        // Highlight selected card
         document.querySelectorAll('#run-list > div').forEach(el => {
-            el.classList.remove('bg-blue-50', 'border-l-4', 'border-l-blue-500');
+            el.classList.remove('bg-blue-50', 'dark:bg-blue-900/30', 'border-l-4', 'border-l-blue-500');
         });
         const card = document.getElementById('run-card-' + runId);
         if (card) {
-            card.classList.add('bg-blue-50', 'border-l-4', 'border-l-blue-500');
+            card.classList.add('bg-blue-50', 'dark:bg-blue-900/30', 'border-l-4', 'border-l-blue-500');
         }
 
         currentRunId = runId;
 
-        // Close existing SSE connection
+        const listPanel = document.getElementById('run-list-panel');
+        const detailPanel = document.getElementById('run-detail-panel');
+        if (window.innerWidth < 1024) {
+            listPanel.classList.add('hidden');
+            detailPanel.classList.remove('hidden');
+            detailPanel.classList.add('flex');
+            detailPanel.style.minHeight = '60vh';
+            detailPanel.style.maxHeight = 'calc(100vh - 200px)';
+        } else {
+            detailPanel.classList.remove('hidden');
+            detailPanel.classList.add('flex');
+        }
+
         if (eventSource) {
             eventSource.close();
             eventSource = null;
         }
 
-        // Fetch initial events HTML fragment
         fetch('/dashboard/monitor/events/' + runId)
             .then(resp => resp.text())
             .then(html => {
@@ -169,29 +194,30 @@
                 scrollEventLog();
             });
 
-        // Open SSE connection for live updates
         eventSource = new EventSource('/dashboard/monitor/stream?run_id=' + runId);
         eventSource.onmessage = function(e) {
             try {
                 const ev = JSON.parse(e.data);
                 appendEvent(ev);
                 scrollEventLog();
-            } catch (err) {
-                // Ignore parse errors (keepalives, etc.)
-            }
+            } catch (err) {}
         };
-        eventSource.onerror = function() {
-            // SSE connection lost — will auto-reconnect
-        };
+        eventSource.onerror = function() {};
+    }
+
+    function showRunList() {
+        const listPanel = document.getElementById('run-list-panel');
+        const detailPanel = document.getElementById('run-detail-panel');
+        listPanel.classList.remove('hidden');
+        detailPanel.classList.add('hidden');
+        detailPanel.classList.remove('flex');
     }
 
     function appendEvent(ev) {
         const log = document.getElementById('run-event-log');
-        // Remove "no events" message if present
         const noEvents = log.querySelector('.no-events-msg');
         if (noEvents) noEvents.remove();
 
-        // Check if event already exists (from replay)
         if (log.querySelector('[data-seq="' + ev.seq + '"]')) return;
 
         const div = document.createElement('div');
@@ -200,31 +226,34 @@
 
         let tokenInfo = '';
         if (ev.input_tokens || ev.output_tokens) {
-            tokenInfo = '<span class="text-slate-400 ml-2">' +
+            tokenInfo = '<span class="text-slate-400 dark:text-slate-500 ml-1 sm:ml-2">' +
                 (ev.input_tokens || 0) + '/' + (ev.output_tokens || 0) + ' tok</span>';
         }
         let costInfo = '';
         if (ev.cost_usd) {
-            costInfo = '<span class="text-slate-500 ml-2 font-mono">$' + ev.cost_usd.toFixed(6) + '</span>';
+            costInfo = '<span class="text-slate-500 dark:text-slate-400 ml-1 sm:ml-2 font-mono">$' + ev.cost_usd.toFixed(6) + '</span>';
         }
         let latencyInfo = '';
         if (ev.latency_ms) {
-            latencyInfo = '<span class="text-slate-400 ml-2">' + ev.latency_ms + 'ms</span>';
+            latencyInfo = '<span class="text-slate-400 dark:text-slate-500 ml-1 sm:ml-2">' + ev.latency_ms + 'ms</span>';
         }
         let modelInfo = '';
         if (ev.model) {
-            modelInfo = '<span class="text-slate-400 ml-2 text-[10px]">' + escapeHtml(ev.model) + '</span>';
+            const shortModel = ev.model.split('/').pop();
+            modelInfo = '<span class="text-slate-400 dark:text-slate-500 ml-1 sm:ml-2 text-[10px]">' + escapeHtml(shortModel) + '</span>';
         }
 
         const timeStr = ev.created_at ? new Date(ev.created_at).toLocaleTimeString() : '';
 
         div.innerHTML =
-            '<div class="flex items-center flex-wrap gap-1">' +
-                '<span class="text-[10px] text-slate-400 font-mono">' + timeStr + '</span>' +
-                '<span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ' + eventTextColor(ev.event_type) + '">' +
+            '<div class="flex items-start flex-wrap gap-1">' +
+                '<span class="text-[10px] text-slate-400 dark:text-slate-500 font-mono shrink-0">' + timeStr + '</span>' +
+                '<span class="inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium shrink-0 ' + eventTextColor(ev.event_type) + '">' +
                     escapeHtml(ev.event_type) +
                 '</span>' +
-                '<span class="text-xs font-medium text-slate-700">' + escapeHtml(ev.step_name) + '</span>' +
+            '</div>' +
+            '<div class="flex items-center flex-wrap gap-1 mt-0.5">' +
+                '<span class="text-xs font-medium text-slate-700 dark:text-slate-300 break-all">' + escapeHtml(ev.step_name) + '</span>' +
                 modelInfo + tokenInfo + costInfo + latencyInfo +
             '</div>';
 
@@ -234,8 +263,8 @@
     function eventBorderColor(type) {
         switch (type) {
             case 'PIPELINE_START': return 'border-blue-400';
-            case 'PIPELINE_STEP': return 'border-slate-300';
-            case 'AI_CALL_START': return 'border-amber-300';
+            case 'PIPELINE_STEP': return 'border-slate-300 dark:border-slate-600';
+            case 'AI_CALL_START': return 'border-amber-300 dark:border-amber-500';
             case 'AI_CALL_COMPLETE': return 'border-green-400';
             case 'AI_CALL_RETRY': return 'border-orange-400';
             case 'VALIDATION_ERROR': return 'border-red-400';
@@ -243,23 +272,23 @@
             case 'PIPELINE_COMPLETE': return 'border-green-600';
             case 'PIPELINE_ERROR': return 'border-red-600';
             case 'CANCELLED': return 'border-slate-500';
-            default: return 'border-slate-300';
+            default: return 'border-slate-300 dark:border-slate-600';
         }
     }
 
     function eventTextColor(type) {
         switch (type) {
-            case 'PIPELINE_START': return 'bg-blue-100 text-blue-800';
-            case 'PIPELINE_STEP': return 'bg-slate-100 text-slate-700';
-            case 'AI_CALL_START': return 'bg-amber-100 text-amber-800';
-            case 'AI_CALL_COMPLETE': return 'bg-green-100 text-green-800';
-            case 'AI_CALL_RETRY': return 'bg-orange-100 text-orange-800';
-            case 'VALIDATION_ERROR': return 'bg-red-100 text-red-800';
-            case 'BUDGET_WARNING': return 'bg-yellow-100 text-yellow-800';
-            case 'PIPELINE_COMPLETE': return 'bg-green-200 text-green-900';
-            case 'PIPELINE_ERROR': return 'bg-red-200 text-red-900';
-            case 'CANCELLED': return 'bg-slate-200 text-slate-700';
-            default: return 'bg-slate-100 text-slate-700';
+            case 'PIPELINE_START': return 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300';
+            case 'PIPELINE_STEP': return 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300';
+            case 'AI_CALL_START': return 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300';
+            case 'AI_CALL_COMPLETE': return 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300';
+            case 'AI_CALL_RETRY': return 'bg-orange-100 text-orange-800 dark:bg-orange-900/50 dark:text-orange-300';
+            case 'VALIDATION_ERROR': return 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300';
+            case 'BUDGET_WARNING': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300';
+            case 'PIPELINE_COMPLETE': return 'bg-green-200 text-green-900 dark:bg-green-900/60 dark:text-green-200';
+            case 'PIPELINE_ERROR': return 'bg-red-200 text-red-900 dark:bg-red-900/60 dark:text-red-200';
+            case 'CANCELLED': return 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300';
+            default: return 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300';
         }
     }
 

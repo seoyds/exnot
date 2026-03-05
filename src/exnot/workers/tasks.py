@@ -137,7 +137,7 @@ def discover_all_exchange_urls(force: bool = False):
     bind=True,
     max_retries=0,
 )
-def scrape_and_process_exchange(self, exchange_code: str):
+def scrape_and_process_exchange(self, exchange_code: str, force: bool = False):
     """Full scrape-parse-normalize-diff pipeline for a single exchange.
 
     Delegates the core logic to run_scrape_pipeline() and then triggers
@@ -157,7 +157,7 @@ def scrape_and_process_exchange(self, exchange_code: str):
 
     session = get_sync_session()
     try:
-        change_report = run_scrape_pipeline(exchange_code, session, celery_task_id=self.request.id)
+        change_report = run_scrape_pipeline(exchange_code, session, celery_task_id=self.request.id, force=force)
         session.commit()
 
         if change_report is not None and change_report.has_changes:

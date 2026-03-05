@@ -174,7 +174,9 @@ def run_scrape_pipeline(
             return None
 
         if force and latest_hash == collection.primary_hash:
-            logger.info(f"[{exchange_code}] Force re-extraction (document unchanged, hash: {collection.primary_hash[:12]}...)")
+            logger.info(
+                f"[{exchange_code}] Force re-extraction (document unchanged, hash: {collection.primary_hash[:12]}...)"
+            )
 
         logger.info(
             f"[{exchange_code}] Document changed! "
@@ -741,8 +743,8 @@ def _save_normalized_fees(
             tier_level=entry.tier_level,
             tier_condition_text=entry.tier_condition_text,
             # Canonical fee identity fields
-            exchange_fee_code=getattr(entry, 'exchange_fee_code', None) or getattr(entry, 'fee_code', None),
-            exchange_fee_name=getattr(entry, 'exchange_fee_name', None) or getattr(entry, 'fee_name', None),
+            exchange_fee_code=getattr(entry, "exchange_fee_code", None) or getattr(entry, "fee_code", None),
+            exchange_fee_name=getattr(entry, "exchange_fee_name", None) or getattr(entry, "fee_name", None),
         )
         db_fees.append(fee)
 
@@ -857,9 +859,7 @@ def _process_protocol_specs(exchange, session, emitter=None):
 
             # Save billing codes
             for bc in result.output.billing_codes:
-                existing = session.query(BillingCode).filter_by(
-                    exchange_id=exchange.id, code=bc.code
-                ).first()
+                existing = session.query(BillingCode).filter_by(exchange_id=exchange.id, code=bc.code).first()
                 if not existing:
                     protocol = BillingProtocol.OTHER
                     if bc.protocol in BillingProtocol.__members__:

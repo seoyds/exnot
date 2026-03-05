@@ -29,10 +29,25 @@ def test_exchange_document_table_name():
 def test_exchange_document_has_required_columns():
     col_names = {c.name for c in ExchangeDocument.__table__.columns}
     required = {
-        "id", "exchange_id", "source_url", "url_pattern", "title",
-        "content_type", "doc_category", "status", "is_pinned", "is_primary",
-        "classification_confidence", "classification_reasoning", "admin_notes",
-        "last_seen_at", "last_fetched_hash", "discovered_at", "approved_at",
-        "approved_by", "created_at", "updated_at",
+        "id",
+        "exchange_id",
+        "source_url",
+        "url_pattern",
+        "title",
+        "content_type",
+        "doc_category",
+        "status",
+        "is_pinned",
+        "is_primary",
+        "classification_confidence",
+        "classification_reasoning",
+        "admin_notes",
+        "last_seen_at",
+        "last_fetched_hash",
+        "discovered_at",
+        "approved_at",
+        "approved_by",
+        "created_at",
+        "updated_at",
     }
     assert required.issubset(col_names)

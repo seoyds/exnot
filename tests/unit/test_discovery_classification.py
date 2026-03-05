@@ -1,4 +1,4 @@
-from exnot.discovery.discoverer import UrlDiscoverer, ClassifiedCandidate
+from exnot.discovery.discoverer import ClassifiedCandidate, UrlDiscoverer
 
 
 def test_classified_candidate_dataclass():

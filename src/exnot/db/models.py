@@ -481,12 +481,8 @@ class ExchangeDocument(Base):
     url_pattern: Mapped[str | None] = mapped_column(String(500), nullable=True)
     title: Mapped[str | None] = mapped_column(String(200), nullable=True)
     content_type: Mapped[str] = mapped_column(String(100), nullable=False)
-    doc_category: Mapped[DocumentCategory] = mapped_column(
-        Enum(DocumentCategory), default=DocumentCategory.OTHER
-    )
-    status: Mapped[DocumentStatus] = mapped_column(
-        Enum(DocumentStatus), default=DocumentStatus.DISCOVERED
-    )
+    doc_category: Mapped[DocumentCategory] = mapped_column(Enum(DocumentCategory), default=DocumentCategory.OTHER)
+    status: Mapped[DocumentStatus] = mapped_column(Enum(DocumentStatus), default=DocumentStatus.DISCOVERED)
     is_pinned: Mapped[bool] = mapped_column(Boolean, default=False)
     is_primary: Mapped[bool] = mapped_column(Boolean, default=False)
     classification_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -496,9 +492,7 @@ class ExchangeDocument(Base):
     last_fetched_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     discovered_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    approved_by: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
-    )
+    approved_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 

@@ -23,6 +23,14 @@ async def get_fees(
     security_class: list[str] | None = Query(default=None),
     fee_type: list[str] | None = Query(default=None),
     order_type: list[str] | None = Query(default=None),
+    # V3 filters
+    origin_code: list[str] | None = Query(default=None),
+    liquidity_role: list[str] | None = Query(default=None),
+    exec_venue: list[str] | None = Query(default=None),
+    product_type: list[str] | None = Query(default=None),
+    listing_type: list[str] | None = Query(default=None),
+    penny_class: list[str] | None = Query(default=None),
+    auction_type: list[str] | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
     """Get normalized fees for an exchange, optionally filtered."""
@@ -58,6 +66,25 @@ async def get_fees(
         if fee_type and fee.fee_type.value not in [f.upper() for f in fee_type]:
             continue
         if order_type and fee.order_type.value not in [o.upper() for o in order_type]:
+            continue
+        # V3 filters
+        if origin_code and (not fee.origin_code or fee.origin_code.upper() not in [o.upper() for o in origin_code]):
+            continue
+        if liquidity_role and (
+            not fee.liquidity_role or fee.liquidity_role.upper() not in [lr.upper() for lr in liquidity_role]
+        ):
+            continue
+        if exec_venue and (not fee.exec_venue or fee.exec_venue.upper() not in [e.upper() for e in exec_venue]):
+            continue
+        if product_type and (not fee.product_type or fee.product_type.upper() not in [p.upper() for p in product_type]):
+            continue
+        if listing_type and (
+            not fee.listing_type or fee.listing_type.upper() not in [lt.upper() for lt in listing_type]
+        ):
+            continue
+        if penny_class and (not fee.penny_class or fee.penny_class.upper() not in [pc.upper() for pc in penny_class]):
+            continue
+        if auction_type and (not fee.auction_type or fee.auction_type.upper() not in [a.upper() for a in auction_type]):
             continue
         results.append(NormalizedFeeResponse.from_db_model(fee))
 

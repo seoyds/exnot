@@ -1,4 +1,4 @@
-from exnot.db.repositories import CanonicalFeeRepository, BillingCodeRepository
+from exnot.db.repositories import BillingCodeRepository, CanonicalFeeRepository
 
 
 def test_canonical_fee_repository_exists():

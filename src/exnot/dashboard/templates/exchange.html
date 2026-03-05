@@ -11,19 +11,28 @@
                 <span class="text-slate-300 hidden sm:inline">|</span>
                 <h1 class="text-xl sm:text-3xl font-bold tracking-tight text-slate-900 truncate">{{ exchange.code }}</h1>
             </div>
-            {% if user and user.is_admin %}
-            <form method="post" action="/dashboard/exchanges/{{ exchange.code }}/scrape" class="inline flex-shrink-0"
-                  onsubmit="this.querySelector('button').disabled=true; this.querySelector('.btn-label').textContent='Scraping...'">
-                <button type="submit"
-                        class="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-2.5 py-1.5 sm:px-3.5 sm:py-2 text-xs sm:text-sm font-medium text-white shadow-sm hover:bg-blue-500 transition-colors">
-                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182" />
-                    </svg>
-                    <span class="btn-label hidden sm:inline">Scrape Now</span>
-                    <span class="btn-label sm:hidden">Scrape</span>
-                </button>
-            </form>
-            {% endif %}
+            <div class="flex items-center gap-2 flex-shrink-0">
+                <a href="/dashboard/exchanges/{{ exchange.code }}/documents"
+                   class="inline-flex items-center px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100">
+                    Documents
+                    {% if pending_doc_count %}
+                    <span class="ml-2 bg-amber-500 text-white text-xs rounded-full px-2 py-0.5">{{ pending_doc_count }}</span>
+                    {% endif %}
+                </a>
+                {% if user and user.is_admin %}
+                <form method="post" action="/dashboard/exchanges/{{ exchange.code }}/scrape" class="inline"
+                      onsubmit="this.querySelector('button').disabled=true; this.querySelector('.btn-label').textContent='Scraping...'">
+                    <button type="submit"
+                            class="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-2.5 py-1.5 sm:px-3.5 sm:py-2 text-xs sm:text-sm font-medium text-white shadow-sm hover:bg-blue-500 transition-colors">
+                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182" />
+                        </svg>
+                        <span class="btn-label hidden sm:inline">Scrape Now</span>
+                        <span class="btn-label sm:hidden">Scrape</span>
+                    </button>
+                </form>
+                {% endif %}
+            </div>
         </div>
         <p class="mt-1 text-xs sm:text-sm text-slate-500 truncate">{{ exchange.name }}</p>
     </div>
@@ -474,6 +483,8 @@
                             <th scope="col" class="px-3 lg:px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-slate-500 cursor-pointer hover:text-slate-700 select-none" onclick="sortTable(6)">
                                 Amount <svg class="inline h-3 w-3 ml-0.5 opacity-40" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" /></svg>
                             </th>
+                            <th scope="col" class="px-3 lg:px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Fee Code</th>
+                            <th scope="col" class="px-3 lg:px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Canonical</th>
                             <th scope="col" class="px-3 lg:px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Tier</th>
                             <th scope="col" class="px-3 lg:px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Section</th>
                             <th scope="col" class="px-3 lg:px-4 py-3 text-center text-xs font-medium uppercase tracking-wider text-slate-500 w-10">V3</th>
@@ -516,6 +527,12 @@
                             <td class="whitespace-nowrap px-3 lg:px-4 py-3 text-sm text-right font-mono font-semibold
                                        {% if fee.is_rebate %}text-green-700{% else %}text-red-700{% endif %}">
                                 {{ cents_to_dollars(fee.amount_cents) }}
+                            </td>
+                            <td class="whitespace-nowrap px-3 lg:px-4 py-3 text-xs font-mono text-slate-600">
+                                {{ fee.exchange_fee_code or '\u2014' }}
+                            </td>
+                            <td class="px-3 lg:px-4 py-3 text-xs text-slate-600 max-w-[150px] truncate" title="{% if fee.canonical_fee %}{{ fee.canonical_fee.display_name }}{% endif %}">
+                                {% if fee.canonical_fee %}{{ fee.canonical_fee.display_name }}{% else %}&mdash;{% endif %}
                             </td>
                             <td class="px-3 lg:px-4 py-3 text-sm text-slate-500">
                                 {% if fee.tier_id and fee.tier %}
@@ -573,7 +590,7 @@
                         </tr>
                         {% if has_v3 %}
                         <tr class="v3-detail-row hidden">
-                            <td colspan="10" class="px-4 py-3 bg-slate-50/70 border-t-0">
+                            <td colspan="12" class="px-4 py-3 bg-slate-50/70 border-t-0">
                                 <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-x-6 gap-y-2 text-xs">
                                     {% if fee.fee_name %}
                                     <div class="col-span-2 lg:col-span-3"><span class="font-medium text-slate-500">Fee Name:</span> <span class="text-slate-800">{{ fee.fee_name }}</span></div>

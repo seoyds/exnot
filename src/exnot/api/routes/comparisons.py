@@ -26,6 +26,11 @@ async def compare_exchanges(
     security_class: str | None = Query(default=None),
     fee_type: str | None = Query(default=None),
     order_type: str | None = Query(default=None),
+    # V3 filters
+    origin_code: str | None = Query(default=None),
+    liquidity_role: str | None = Query(default=None),
+    exec_venue: str | None = Query(default=None),
+    product_type: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
     """Compare fees across multiple exchanges."""
@@ -45,6 +50,17 @@ async def compare_exchanges(
             continue
 
         fees = await fee_repo.get_by_snapshot(snapshot.id)
+
+        # V3 pre-filters
+        if origin_code:
+            fees = [f for f in fees if f.origin_code and f.origin_code.upper() == origin_code.upper()]
+        if liquidity_role:
+            fees = [f for f in fees if f.liquidity_role and f.liquidity_role.upper() == liquidity_role.upper()]
+        if exec_venue:
+            fees = [f for f in fees if f.exec_venue and f.exec_venue.upper() == exec_venue.upper()]
+        if product_type:
+            fees = [f for f in fees if f.product_type and f.product_type.upper() == product_type.upper()]
+
         from decimal import Decimal
 
         normalized_fees = [

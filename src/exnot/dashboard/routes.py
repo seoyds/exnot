@@ -20,7 +20,6 @@ from exnot.db.models import (
     AgentRunStatus,
     ChangeType,
     DocumentStatus,
-    ExchangeDocument,
     FeeType,
     NormalizedFee,
     NotificationFrequency,
@@ -105,9 +104,11 @@ async def dashboard_overview(request: Request, db: AsyncSession = Depends(get_db
     exchanges = await exchange_repo.get_all(active_only=False)
 
     snapshot_repo = SnapshotRepository(db)
+    doc_repo = ExchangeDocumentRepository(db)
     exchange_data = []
     for exch in exchanges:
         latest = await snapshot_repo.get_latest(exch.id)
+        docs = await doc_repo.get_by_exchange(exch.id)
         exchange_data.append(
             {
                 "exchange": exch,
@@ -115,6 +116,7 @@ async def dashboard_overview(request: Request, db: AsyncSession = Depends(get_db
                 "version": latest.version if latest else 0,
                 "last_updated": latest.created_at if latest else None,
                 "status": latest.status.value if latest else "NO_DATA",
+                "doc_count": len(docs),
             }
         )
 
@@ -179,6 +181,11 @@ async def exchange_detail(
 
     user = await _get_current_user_from_cookie(request, db)
 
+    # Pending document count for badge
+    ex_doc_repo = ExchangeDocumentRepository(db)
+    pending_docs = await ex_doc_repo.get_pending_review(exchange_id=exchange.id)
+    pending_doc_count = len(pending_docs)
+
     # Enum values for filter dropdowns
     participant_types = [pt.value for pt in ParticipantType]
     security_classes = [sc.value for sc in SecurityClass]
@@ -197,6 +204,7 @@ async def exchange_detail(
             "cents_to_dollars": _cents_to_dollars,
             "format_file_size": _format_file_size,
             "user": user,
+            "pending_doc_count": pending_doc_count,
             "participant_types": participant_types,
             "security_classes": security_classes,
             "order_types": order_types,
@@ -407,6 +415,8 @@ async def compare_page(
                             "amount_cents": f.amount_cents,
                             "amount": _cents_to_dollars(f.amount_cents),
                             "is_rebate": f.is_rebate,
+                            "canonical_fee": f.canonical_fee.display_name if f.canonical_fee else None,
+                            "canonical_fee_id": f.canonical_fee_id,
                         }
                         amounts[code_key] = f.amount_cents
                         break

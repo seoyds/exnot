@@ -1,7 +1,5 @@
 """Tests for the per-exchange prompt registry."""
 
-import pytest
-
 from exnot.ai.prompts.registry import EXCHANGE_PROMPTS, get_extraction_prompt
 
 

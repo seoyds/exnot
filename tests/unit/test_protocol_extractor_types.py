@@ -1,4 +1,4 @@
-from exnot.ai.types import ProtocolExtractionResult, ExtractedBillingCode
+from exnot.ai.types import ExtractedBillingCode, ProtocolExtractionResult
 
 
 def test_extracted_billing_code():
@@ -15,9 +15,7 @@ def test_extracted_billing_code():
 
 def test_protocol_extraction_result():
     result = ProtocolExtractionResult(
-        billing_codes=[
-            ExtractedBillingCode(code="OB", protocol="FIX", description="Options Base")
-        ],
+        billing_codes=[ExtractedBillingCode(code="OB", protocol="FIX", description="Options Base")],
         extraction_notes="Found 1 billing code in FIX spec",
     )
     assert len(result.billing_codes) == 1

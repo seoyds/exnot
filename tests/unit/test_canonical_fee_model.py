@@ -23,8 +23,15 @@ def test_billing_code_table_name():
 def test_billing_code_has_required_columns():
     col_names = {c.name for c in BillingCode.__table__.columns}
     required = {
-        "id", "exchange_id", "code", "protocol", "description",
-        "canonical_fee_id", "source_document_id", "effective_date", "tag_number",
+        "id",
+        "exchange_id",
+        "code",
+        "protocol",
+        "description",
+        "canonical_fee_id",
+        "source_document_id",
+        "effective_date",
+        "tag_number",
     }
     assert required.issubset(col_names)
 

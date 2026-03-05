@@ -17,8 +17,12 @@ def test_derive_pattern_from_html_url():
 
 
 def test_match_url_pattern():
-    pattern = derive_url_pattern("https://www.nyse.com/publicdocs/nyse/markets/nyse-arca/NYSE_Arca_Options_Fee_Schedule.pdf")
-    assert match_url_pattern(pattern, "https://www.nyse.com/publicdocs/nyse/markets/nyse-arca/NYSE_Arca_Options_Fee_Schedule.pdf")
+    pattern = derive_url_pattern(
+        "https://www.nyse.com/publicdocs/nyse/markets/nyse-arca/NYSE_Arca_Options_Fee_Schedule.pdf"
+    )
+    assert match_url_pattern(
+        pattern, "https://www.nyse.com/publicdocs/nyse/markets/nyse-arca/NYSE_Arca_Options_Fee_Schedule.pdf"
+    )
 
 
 def test_match_pattern_with_version_change():

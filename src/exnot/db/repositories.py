@@ -124,7 +124,7 @@ class NormalizedFeeRepository:
         stmt = (
             select(NormalizedFee)
             .where(NormalizedFee.snapshot_id == snapshot_id)
-            .options(selectinload(NormalizedFee.tier))
+            .options(selectinload(NormalizedFee.tier), selectinload(NormalizedFee.canonical_fee))
             .order_by(
                 NormalizedFee.participant_type,
                 NormalizedFee.security_class,
@@ -485,8 +485,9 @@ class CanonicalFeeRepository:
 
     async def seed_from_yaml(self, yaml_path: str) -> int:
         """Load canonical fees from YAML, upsert by canonical_code. Returns count of new entries."""
-        import yaml
         from pathlib import Path
+
+        import yaml
 
         data = yaml.safe_load(Path(yaml_path).read_text())
         created = 0
@@ -511,11 +512,7 @@ class BillingCodeRepository:
         self.session = session
 
     async def get_by_exchange(self, exchange_id: uuid.UUID) -> list[BillingCode]:
-        stmt = (
-            select(BillingCode)
-            .where(BillingCode.exchange_id == exchange_id)
-            .order_by(BillingCode.code)
-        )
+        stmt = select(BillingCode).where(BillingCode.exchange_id == exchange_id).order_by(BillingCode.code)
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
