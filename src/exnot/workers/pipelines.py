@@ -44,6 +44,47 @@ from exnot.storage.minio_client import DocumentStorage
 logger = logging.getLogger(__name__)
 
 
+def _get_approved_document_urls(exchange: Exchange, session: Session) -> tuple[str, list[str]]:
+    """Get approved document URLs for an exchange.
+
+    Returns (primary_url, alternate_urls).
+    Priority: pinned docs > approved fee schedule docs > Exchange.fee_schedule_url fallback.
+    Uses sync session (same as pipeline).
+    """
+    from exnot.db.models import DocumentCategory, DocumentStatus, ExchangeDocument
+
+    # 1. Check pinned documents
+    pinned = (
+        session.query(ExchangeDocument)
+        .filter_by(exchange_id=exchange.id, is_pinned=True, status=DocumentStatus.APPROVED)
+        .order_by(ExchangeDocument.is_primary.desc())
+        .all()
+    )
+    if pinned:
+        primary_url = pinned[0].source_url
+        alternate_urls = [d.source_url for d in pinned[1:]]
+        return primary_url, alternate_urls
+
+    # 2. Check approved fee schedule documents
+    approved = (
+        session.query(ExchangeDocument)
+        .filter_by(
+            exchange_id=exchange.id,
+            doc_category=DocumentCategory.FEE_SCHEDULE,
+            status=DocumentStatus.APPROVED,
+        )
+        .order_by(ExchangeDocument.is_primary.desc(), ExchangeDocument.classification_confidence.desc())
+        .all()
+    )
+    if approved:
+        primary_url = approved[0].source_url
+        alternate_urls = [d.source_url for d in approved[1:]]
+        return primary_url, alternate_urls
+
+    # 3. Fallback to Exchange.fee_schedule_url
+    return exchange.fee_schedule_url, exchange.alternate_urls or []
+
+
 def run_scrape_pipeline(
     exchange_code: str,
     session: Session,
@@ -102,7 +143,12 @@ def run_scrape_pipeline(
             except Exception:
                 pass
 
-        # --- Step (b): Collect documents (async scraper, bridged via asyncio.run) ---
+        # --- Step (b): Resolve URLs from approved documents (with fallback) ---
+        primary_url, alternate_urls = _get_approved_document_urls(exchange, session)
+        # Temporarily override exchange URLs for the collector
+        exchange.fee_schedule_url = primary_url
+        exchange.alternate_urls = alternate_urls
+
         logger.info(f"[{exchange_code}] Starting document collection from {exchange.fee_schedule_url}")
         collection = _collect_documents(exchange)
 
