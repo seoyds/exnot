@@ -173,6 +173,30 @@ class AgentEventType(str, enum.Enum):
     CANCELLED = "CANCELLED"
 
 
+class DocumentCategory(str, enum.Enum):
+    FEE_SCHEDULE = "FEE_SCHEDULE"
+    PROTOCOL_SPEC = "PROTOCOL_SPEC"
+    REGULATORY_FILING = "REGULATORY_FILING"
+    MEMBERSHIP_AGREEMENT = "MEMBERSHIP_AGREEMENT"
+    CIRCULAR_NOTICE = "CIRCULAR_NOTICE"
+    OTHER = "OTHER"
+
+
+class DocumentStatus(str, enum.Enum):
+    DISCOVERED = "DISCOVERED"
+    CLASSIFIED = "CLASSIFIED"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+    STALE = "STALE"
+
+
+class BillingProtocol(str, enum.Enum):
+    FIX = "FIX"
+    BINARY = "BINARY"
+    SRO = "SRO"
+    OTHER = "OTHER"
+
+
 # --- Models ---
 
 
@@ -203,6 +227,7 @@ class Exchange(Base):
     scrape_logs: Mapped[list["ScrapeLog"]] = relationship(back_populates="exchange")
     discovery_logs: Mapped[list["DiscoveryLog"]] = relationship(back_populates="exchange")
     profile: Mapped["ExchangeProfile | None"] = relationship(back_populates="exchange", uselist=False)
+    documents: Mapped[list["ExchangeDocument"]] = relationship(back_populates="exchange", cascade="all, delete-orphan")
 
 
 class FeeScheduleSnapshot(Base):
@@ -437,6 +462,42 @@ class DiscoveryLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     exchange: Mapped["Exchange"] = relationship(back_populates="discovery_logs")
+
+
+class ExchangeDocument(Base):
+    __tablename__ = "exchange_documents"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    exchange_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("exchanges.id"), nullable=False, index=True
+    )
+    source_url: Mapped[str] = mapped_column(String(500), nullable=False)
+    url_pattern: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    title: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    content_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    doc_category: Mapped[DocumentCategory] = mapped_column(
+        Enum(DocumentCategory), default=DocumentCategory.OTHER
+    )
+    status: Mapped[DocumentStatus] = mapped_column(
+        Enum(DocumentStatus), default=DocumentStatus.DISCOVERED
+    )
+    is_pinned: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_primary: Mapped[bool] = mapped_column(Boolean, default=False)
+    classification_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    classification_reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
+    admin_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    last_fetched_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    discovered_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    approved_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    exchange: Mapped["Exchange"] = relationship(back_populates="documents")
+    approver: Mapped["User | None"] = relationship()
 
 
 class ExchangeProfile(Base):
