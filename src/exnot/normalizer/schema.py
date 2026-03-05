@@ -178,6 +178,11 @@ class NormalizedFeeEntry(BaseModel):
     tier_level: int | None = None
     tier_condition_text: str | None = None
 
+    # Canonical fee identity fields (passed through from ExtractedFee)
+    exchange_fee_code: str | None = None
+    exchange_fee_name: str | None = None
+    suggested_canonical_code: str | None = None
+
     @property
     def amount_cents(self) -> int:
         """Amount in hundredths of a cent for database storage."""

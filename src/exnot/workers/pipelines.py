@@ -48,6 +48,7 @@ def run_scrape_pipeline(
     exchange_code: str,
     session: Session,
     celery_task_id: str | None = None,
+    force: bool = False,
 ) -> ChangeReport | None:
     """Execute the full scrape-parse-normalize-diff pipeline for a single exchange.
 
@@ -115,7 +116,7 @@ def run_scrape_pipeline(
         latest_snapshot = _get_latest_snapshot(exchange, session)
         latest_hash = latest_snapshot.source_hash if latest_snapshot else None
 
-        if latest_hash == collection.primary_hash:
+        if latest_hash == collection.primary_hash and not force:
             logger.info(f"[{exchange_code}] Document unchanged (hash: {collection.primary_hash[:12]}...)")
             _record_scrape_log(exchange, session, ScrapeStatus.NO_CHANGE, collection.primary_hash)
             if emitter:
@@ -125,6 +126,9 @@ def run_scrape_pipeline(
                 except Exception:
                     pass
             return None
+
+        if force and latest_hash == collection.primary_hash:
+            logger.info(f"[{exchange_code}] Force re-extraction (document unchanged, hash: {collection.primary_hash[:12]}...)")
 
         logger.info(
             f"[{exchange_code}] Document changed! "
@@ -684,6 +688,9 @@ def _save_normalized_fees(
             fee_name=entry.fee_name,
             tier_level=entry.tier_level,
             tier_condition_text=entry.tier_condition_text,
+            # Canonical fee identity fields
+            exchange_fee_code=getattr(entry, 'exchange_fee_code', None) or getattr(entry, 'fee_code', None),
+            exchange_fee_name=getattr(entry, 'exchange_fee_name', None) or getattr(entry, 'fee_name', None),
         )
         db_fees.append(fee)
 

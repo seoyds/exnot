@@ -63,6 +63,11 @@ class ExtractedFee(BaseModel):
     tier_level: int | None = None
     tier_condition: str | None = None
 
+    # --- Fee identity fields ---
+    exchange_fee_code: str | None = None
+    exchange_fee_name: str | None = None
+    suggested_canonical_code: str | None = None
+
     # --- Legacy V2 fields (kept for backward compat during migration) ---
     fee_code: str | None = None
     participant_type: str | None = None

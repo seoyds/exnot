@@ -263,6 +263,10 @@ class NormalizationEngine:
             volume_tier=raw.get("volume_tier"),
             tier_threshold_pct=raw.get("tier_threshold_pct"),
             tier_threshold_contracts=raw.get("tier_threshold_contracts"),
+            # Canonical fee identity fields
+            exchange_fee_code=raw.get("exchange_fee_code"),
+            exchange_fee_name=raw.get("exchange_fee_name"),
+            suggested_canonical_code=raw.get("suggested_canonical_code"),
         )
 
     def _normalize_v3_entry(self, raw: dict, exchange_code: str) -> NormalizedFeeEntry | None:
@@ -394,6 +398,10 @@ class NormalizationEngine:
             fee_name=raw.get("fee_name"),
             tier_level=raw.get("tier_level"),
             tier_condition_text=raw.get("tier_condition"),
+            # Canonical fee identity fields
+            exchange_fee_code=raw.get("exchange_fee_code"),
+            exchange_fee_name=raw.get("exchange_fee_name"),
+            suggested_canonical_code=raw.get("suggested_canonical_code"),
         )
 
     def _map_participant(self, value: str) -> ParticipantType | None:
