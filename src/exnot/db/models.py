@@ -312,9 +312,15 @@ class NormalizedFee(Base):
     tier_level: Mapped[int | None] = mapped_column(Integer, nullable=True)
     tier_condition_text: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # Canonical fee mapping
+    canonical_fee_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("canonical_fees.id"), nullable=True)
+    exchange_fee_code: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    exchange_fee_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
     snapshot: Mapped["FeeScheduleSnapshot"] = relationship(back_populates="normalized_fees")
     exchange: Mapped["Exchange"] = relationship(back_populates="normalized_fees")
     tier: Mapped["FeeTier | None"] = relationship(back_populates="fees")
+    canonical_fee: Mapped["CanonicalFee | None"] = relationship()
 
 
 class FeeTier(Base):
@@ -498,6 +504,37 @@ class ExchangeDocument(Base):
 
     exchange: Mapped["Exchange"] = relationship(back_populates="documents")
     approver: Mapped["User | None"] = relationship(foreign_keys=[approved_by])
+
+
+class CanonicalFee(Base):
+    __tablename__ = "canonical_fees"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    canonical_code: Mapped[str] = mapped_column(String(50), unique=True, index=True)
+    display_name: Mapped[str] = mapped_column(String(100))
+    fee_type: Mapped[FeeType] = mapped_column(Enum(FeeType))
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    category: Mapped[str | None] = mapped_column(String(50), nullable=True)
+
+
+class BillingCode(Base):
+    __tablename__ = "billing_codes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    exchange_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("exchanges.id"), index=True)
+    code: Mapped[str] = mapped_column(String(50))
+    protocol: Mapped[BillingProtocol] = mapped_column(Enum(BillingProtocol), default=BillingProtocol.OTHER)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    canonical_fee_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("canonical_fees.id"), nullable=True)
+    source_document_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("exchange_documents.id"), nullable=True
+    )
+    effective_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    tag_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    exchange: Mapped["Exchange"] = relationship()
+    canonical_fee: Mapped["CanonicalFee | None"] = relationship()
+    source_document: Mapped["ExchangeDocument | None"] = relationship()
 
 
 class ExchangeProfile(Base):
