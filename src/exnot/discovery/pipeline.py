@@ -13,7 +13,7 @@ from exnot.db.models import (
     Exchange,
     FeeScheduleFormat,
 )
-from exnot.discovery.discoverer import UrlDiscoverer
+from exnot.discovery.discoverer import ClassifiedCandidate, UrlDiscoverer
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +58,14 @@ def run_discovery_pipeline(exchange_code: str, session: Session, force: bool = F
     )
     session.add(log)
 
+    # Create/update ExchangeDocument records from classified candidates
+    if result.classified_candidates:
+        try:
+            docs = _create_exchange_documents(exchange, result.classified_candidates, session)
+            logger.info(f"[{exchange_code}] Created/updated {len(docs)} ExchangeDocument records")
+        except Exception as e:
+            logger.warning(f"[{exchange_code}] Failed to create ExchangeDocument records: {e}")
+
     if result.primary_url and result.confidence >= 0.5:
         exchange.fee_schedule_url = result.primary_url
         exchange.alternate_urls = result.alternate_urls if result.alternate_urls else []
@@ -85,6 +93,59 @@ def run_discovery_pipeline(exchange_code: str, session: Session, force: bool = F
         session.flush()
         logger.warning(f"[{exchange_code}] Discovery FAILED: {result.error or 'low confidence'}")
         return False
+
+
+def _create_exchange_documents(exchange, classified_candidates: list[ClassifiedCandidate], session: Session):
+    """Create or update ExchangeDocument records from classified candidates."""
+    from exnot.config import get_settings
+    from exnot.db.models import DocumentCategory, DocumentStatus, ExchangeDocument
+
+    settings = get_settings()
+    threshold = settings.doc_auto_approve_threshold
+    created_docs = []
+
+    for candidate in classified_candidates:
+        existing = (
+            session.query(ExchangeDocument)
+            .filter_by(
+                exchange_id=exchange.id,
+                source_url=candidate.url,
+            )
+            .first()
+        )
+
+        if existing:
+            existing.last_seen_at = datetime.utcnow()
+            existing.classification_confidence = candidate.classification_confidence
+            existing.classification_reasoning = candidate.classification_reasoning
+            if existing.status == DocumentStatus.DISCOVERED:
+                existing.status = DocumentStatus.CLASSIFIED
+                existing.doc_category = DocumentCategory[candidate.doc_category]
+            created_docs.append(existing)
+            continue
+
+        doc_category = DocumentCategory[candidate.doc_category]
+        status = DocumentStatus.CLASSIFIED
+
+        # Auto-approve high-confidence fee schedule docs
+        if doc_category == DocumentCategory.FEE_SCHEDULE and candidate.classification_confidence >= threshold:
+            status = DocumentStatus.APPROVED
+
+        doc = ExchangeDocument(
+            exchange_id=exchange.id,
+            source_url=candidate.url,
+            title=candidate.title,
+            content_type=candidate.content_type,
+            doc_category=doc_category,
+            status=status,
+            classification_confidence=candidate.classification_confidence,
+            classification_reasoning=candidate.classification_reasoning,
+        )
+        session.add(doc)
+        created_docs.append(doc)
+
+    session.flush()
+    return created_docs
 
 
 async def _run_async_discovery(exchange_code: str, exchange_name: str, operator: str):

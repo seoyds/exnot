@@ -27,6 +27,21 @@ class CandidateUrl:
 
 
 @dataclass
+class ClassifiedCandidate:
+    """A candidate URL classified into a document category."""
+
+    url: str
+    title: str
+    content_type: str
+    doc_category: str  # DocumentCategory value
+    classification_confidence: float
+    classification_reasoning: str
+    content_preview: str = ""
+    is_pdf: bool = False
+    is_csv: bool = False
+
+
+@dataclass
 class DiscoveryResult:
     """Result of URL discovery for one exchange."""
 
@@ -38,6 +53,7 @@ class DiscoveryResult:
     ai_reasoning: str = ""
     search_queries: list[str] = field(default_factory=list)
     all_candidates: list[dict] = field(default_factory=list)
+    classified_candidates: list[ClassifiedCandidate] = field(default_factory=list)
     confidence: float = 0.0
     error: str | None = None
 
@@ -90,7 +106,11 @@ class UrlDiscoverer:
         candidates = await self._probe_candidates(unique_results)
         result.all_candidates = [{"url": c.url, "title": c.title, "content_type": c.content_type} for c in candidates]
 
-        # Step 3: Use AI agent to evaluate candidates
+        # Step 3: Classify all candidates into document categories
+        classified = await self._classify_candidates(candidates)
+        result.classified_candidates = classified
+
+        # Step 4: Use AI agent to evaluate candidates
         evaluation = await self._evaluate_with_ai(candidates, exchange_code, exchange_name, operator)
 
         result.primary_url = evaluation.get("primary_url")
@@ -103,12 +123,15 @@ class UrlDiscoverer:
 
     def _build_search_queries(self, exchange_name: str, operator: str) -> list[str]:
         """Build 2-3 search queries targeting the fee schedule."""
+        settings = get_settings()
         queries = [
             f"{exchange_name} options fee schedule",
             f"{exchange_name} options transaction fees rebates",
         ]
         if operator.lower() not in exchange_name.lower():
             queries.append(f"{operator} {exchange_name} fee schedule PDF")
+        if settings.discovery_include_protocol_specs:
+            queries.append(f"{exchange_name} FIX protocol specification binary order entry")
         return queries
 
     async def _probe_candidates(self, search_results: list[SearchResult]) -> list[CandidateUrl]:
@@ -160,6 +183,66 @@ class UrlDiscoverer:
             candidate.fetch_error = str(e)
 
         return candidate
+
+    async def _classify_candidates(self, candidates: list[CandidateUrl]) -> list[ClassifiedCandidate]:
+        """Classify each candidate URL into a document category using AI."""
+        from exnot.ai.agents.doc_classifier import doc_classifier_agent
+        from exnot.ai.cost import CostTracker
+        from exnot.ai.models import ModelRegistry, TaskType
+
+        settings = get_settings()
+        registry = ModelRegistry(settings)
+        cost_tracker = CostTracker(exchange_code="discovery", budget_usd=0.50)
+        classified = []
+
+        for candidate in candidates:
+            try:
+                from exnot.ai.deps import DiscoveryDeps
+
+                prompt = (
+                    f"URL: {candidate.url}\n"
+                    f"Title: {candidate.title}\n"
+                    f"Content Type: {candidate.content_type}\n"
+                    f"Preview: {candidate.content_preview[:500] if candidate.content_preview else 'N/A'}\n"
+                )
+                deps = DiscoveryDeps(
+                    model_registry=registry,
+                    cost_tracker=cost_tracker,
+                    exchange_code="",
+                    exchange_name="",
+                    operator="",
+                )
+                model = registry.get_model(TaskType.URL_DISCOVERY)
+                result = await doc_classifier_agent.run(prompt, model=model, deps=deps)
+                classified.append(
+                    ClassifiedCandidate(
+                        url=candidate.url,
+                        title=candidate.title,
+                        content_type=candidate.content_type or ("PDF" if candidate.is_pdf else "HTML"),
+                        doc_category=result.output.doc_category,
+                        classification_confidence=result.output.confidence,
+                        classification_reasoning=result.output.reasoning,
+                        content_preview=candidate.content_preview or "",
+                        is_pdf=candidate.is_pdf,
+                        is_csv=candidate.is_csv,
+                    )
+                )
+            except Exception:
+                classified.append(
+                    ClassifiedCandidate(
+                        url=candidate.url,
+                        title=candidate.title,
+                        content_type=candidate.content_type or "HTML",
+                        doc_category="OTHER",
+                        classification_confidence=0.0,
+                        classification_reasoning="Classification failed",
+                        content_preview=candidate.content_preview or "",
+                        is_pdf=candidate.is_pdf,
+                        is_csv=candidate.is_csv,
+                    )
+                )
+
+        return classified
 
     async def _evaluate_with_ai(
         self,
