@@ -1,0 +1,357 @@
+{% extends "base.html" %}
+
+{% block title %}Documents - {{ exchange.name }}{% endblock %}
+
+{% block header %}
+<header class="bg-white shadow-sm">
+    <div class="mx-auto max-w-7xl px-4 py-4 sm:py-6 sm:px-6 lg:px-8">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-2 sm:space-x-3 min-w-0">
+                <a href="/dashboard/exchanges/{{ exchange.code }}" class="text-blue-600 hover:text-blue-500 text-sm font-medium flex-shrink-0">&larr; Back</a>
+                <span class="text-slate-300 hidden sm:inline">|</span>
+                <h1 class="text-xl sm:text-3xl font-bold tracking-tight text-slate-900 truncate">Documents &mdash; {{ exchange.name }}</h1>
+            </div>
+        </div>
+    </div>
+</header>
+{% endblock %}
+
+{% block content %}
+
+{# ---- Document card macro (must be defined before use) ---- #}
+{% macro render_doc_card(doc, color, dimmed=false) %}
+<div class="doc-card rounded-lg border-l-4 border-{{ color }}-400 bg-white shadow-sm border border-slate-200 p-4 {{ 'opacity-60' if dimmed else '' }}"
+     data-category="{{ doc.doc_category.value }}"
+     data-status="{{ doc.status.value }}">
+    <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+        <div class="flex-1 min-w-0">
+            <!-- Badges row -->
+            <div class="flex flex-wrap items-center gap-1.5 mb-2">
+                {% if doc.is_pinned %}
+                <span class="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-800">
+                    <svg class="h-3 w-3 mr-0.5" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M9.653 16.915l-.005-.003-.019-.01a20.759 20.759 0 01-1.162-.682 22.045 22.045 0 01-2.837-2.194C3.637 12.14 2 9.806 2 7a5 5 0 019.995-.217A5 5 0 0118 7c0 2.806-1.637 5.14-3.63 6.986a21.572 21.572 0 01-3.815 2.929l-.056.033-.019.01-.005.003L10 16.5l-.347.415z"/>
+                    </svg>
+                    Pinned
+                </span>
+                {% endif %}
+                {% if doc.is_primary %}
+                <span class="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-medium text-green-800">
+                    Primary
+                </span>
+                {% endif %}
+                <span class="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
+                    {{ doc.content_type }}
+                </span>
+                <span class="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
+                    {{ doc.doc_category.value | replace('_', ' ') | title }}
+                </span>
+                {% if doc.status.value == 'APPROVED' %}
+                <span class="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-medium text-green-800">Approved</span>
+                {% elif doc.status.value == 'DISCOVERED' or doc.status.value == 'CLASSIFIED' %}
+                <span class="inline-flex items-center rounded-full bg-yellow-100 px-2 py-0.5 text-[10px] font-medium text-yellow-800">{{ doc.status.value | title }}</span>
+                {% elif doc.status.value == 'REJECTED' %}
+                <span class="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-800">Rejected</span>
+                {% elif doc.status.value == 'STALE' %}
+                <span class="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">Stale</span>
+                {% endif %}
+            </div>
+
+            <!-- Title / URL -->
+            <h3 class="text-sm font-semibold text-slate-900 mb-1">
+                {% if doc.title %}
+                    {{ doc.title }}
+                {% else %}
+                    {{ doc.source_url | truncate(80, true) }}
+                {% endif %}
+            </h3>
+            <a href="{{ doc.source_url }}" target="_blank" rel="noopener noreferrer"
+               class="text-xs text-blue-600 hover:text-blue-500 hover:underline break-all">
+                {{ doc.source_url | truncate(100, true) }}
+                <svg class="inline h-3 w-3 ml-0.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                </svg>
+            </a>
+
+            <!-- Metadata row -->
+            <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+                {% if doc.classification_confidence is not none %}
+                <span title="Classification confidence">
+                    <svg class="inline h-3.5 w-3.5 mr-0.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
+                    </svg>
+                    {{ '%.0f' % (doc.classification_confidence * 100) }}% confidence
+                </span>
+                {% endif %}
+                {% if doc.last_seen_at %}
+                <span title="Last seen">
+                    <svg class="inline h-3.5 w-3.5 mr-0.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    {{ doc.last_seen_at.strftime('%Y-%m-%d %H:%M') }}
+                </span>
+                {% endif %}
+                {% if doc.last_fetched_hash %}
+                <span title="Content hash: {{ doc.last_fetched_hash }}" class="font-mono">
+                    <svg class="inline h-3.5 w-3.5 mr-0.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M7.864 4.243A7.5 7.5 0 0119.5 10.5c0 2.92-.556 5.709-1.568 8.268M5.742 6.364A7.465 7.465 0 004.5 10.5a7.464 7.464 0 01-1.15 3.993m1.989 3.559A11.209 11.209 0 008.25 10.5a3.75 3.75 0 117.5 0c0 .527-.021 1.049-.064 1.565M12 10.5a14.94 14.94 0 01-3.6 9.75m6.633-4.596a18.666 18.666 0 01-2.485 5.33" />
+                    </svg>
+                    {{ doc.last_fetched_hash[:12] }}...
+                </span>
+                {% endif %}
+            </div>
+
+            <!-- AI reasoning (for pending docs) -->
+            {% if doc.classification_reasoning and (doc.status.value == 'DISCOVERED' or doc.status.value == 'CLASSIFIED') %}
+            <div class="mt-2 rounded-md bg-amber-50 border border-amber-200 p-2">
+                <p class="text-xs font-medium text-amber-800 mb-0.5">AI Reasoning</p>
+                <p class="text-xs text-amber-700">{{ doc.classification_reasoning }}</p>
+            </div>
+            {% endif %}
+
+            <!-- Admin notes -->
+            {% if doc.admin_notes %}
+            <div class="mt-2 rounded-md bg-slate-50 border border-slate-200 p-2">
+                <p class="text-xs font-medium text-slate-600 mb-0.5">Admin Notes</p>
+                <p class="text-xs text-slate-500">{{ doc.admin_notes }}</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Action buttons -->
+        <div class="flex flex-wrap sm:flex-col gap-2 flex-shrink-0">
+            <!-- View button (always visible) -->
+            <a href="{{ doc.source_url }}" target="_blank" rel="noopener noreferrer"
+               class="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-200 transition-colors">
+                <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                </svg>
+                View
+            </a>
+
+            {% if user and user.is_admin %}
+            <!-- Approve -->
+            {% if doc.status.value == 'DISCOVERED' or doc.status.value == 'CLASSIFIED' or doc.status.value == 'REJECTED' or doc.status.value == 'STALE' %}
+            <form method="post" action="/dashboard/exchanges/{{ exchange.code }}/documents/{{ doc.id }}/approve" class="inline">
+                <button type="submit"
+                        class="inline-flex items-center gap-1 rounded-md bg-green-100 px-2.5 py-1.5 text-xs font-medium text-green-700 hover:bg-green-200 transition-colors w-full sm:w-auto">
+                    <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                    </svg>
+                    Approve
+                </button>
+            </form>
+
+            <!-- Approve & Pin -->
+            <form method="post" action="/dashboard/exchanges/{{ exchange.code }}/documents/{{ doc.id }}/approve-pin" class="inline">
+                <button type="submit"
+                        class="inline-flex items-center gap-1 rounded-md bg-blue-100 px-2.5 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-200 transition-colors w-full sm:w-auto">
+                    <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                    </svg>
+                    Approve &amp; Pin
+                </button>
+            </form>
+            {% endif %}
+
+            <!-- Reject -->
+            {% if doc.status.value == 'DISCOVERED' or doc.status.value == 'CLASSIFIED' or doc.status.value == 'APPROVED' %}
+            <form method="post" action="/dashboard/exchanges/{{ exchange.code }}/documents/{{ doc.id }}/reject" class="inline">
+                <button type="submit"
+                        class="inline-flex items-center gap-1 rounded-md bg-red-100 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-200 transition-colors w-full sm:w-auto"
+                        onclick="return confirm('Reject this document?')">
+                    <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                    Reject
+                </button>
+            </form>
+            {% endif %}
+
+            <!-- Pin / Unpin -->
+            {% if doc.status.value == 'APPROVED' %}
+                {% if doc.is_pinned %}
+                <form method="post" action="/dashboard/exchanges/{{ exchange.code }}/documents/{{ doc.id }}/unpin" class="inline">
+                    <button type="submit"
+                            class="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-200 transition-colors w-full sm:w-auto">
+                        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 3l1.664 1.664M21 21l-1.5-1.5m-5.533-1.467l-1.467-1.467-6-6L3 8.25V3h5.25l2.816 2.816M16.5 16.5l4.5 4.5M16.5 16.5l-4.5-4.5" />
+                        </svg>
+                        Unpin
+                    </button>
+                </form>
+                {% else %}
+                <form method="post" action="/dashboard/exchanges/{{ exchange.code }}/documents/{{ doc.id }}/pin" class="inline">
+                    <button type="submit"
+                            class="inline-flex items-center gap-1 rounded-md bg-blue-100 px-2.5 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-200 transition-colors w-full sm:w-auto">
+                        <svg class="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M9.653 16.915l-.005-.003-.019-.01a20.759 20.759 0 01-1.162-.682 22.045 22.045 0 01-2.837-2.194C3.637 12.14 2 9.806 2 7a5 5 0 019.995-.217A5 5 0 0118 7c0 2.806-1.637 5.14-3.63 6.986a21.572 21.572 0 01-3.815 2.929l-.056.033-.019.01-.005.003L10 16.5l-.347.415z"/>
+                        </svg>
+                        Pin
+                    </button>
+                </form>
+                {% endif %}
+            {% endif %}
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endmacro %}
+
+<!-- Filters -->
+<div class="mb-6 flex flex-col sm:flex-row gap-3">
+    <div>
+        <label for="filter-category" class="block text-xs font-medium text-slate-500 mb-1">Category</label>
+        <select id="filter-category" onchange="filterDocuments()"
+                class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+            <option value="">All Categories</option>
+            <option value="FEE_SCHEDULE">Fee Schedule</option>
+            <option value="PROTOCOL_SPEC">Protocol Spec</option>
+            <option value="REGULATORY_FILING">Regulatory Filing</option>
+            <option value="MEMBERSHIP_AGREEMENT">Membership Agreement</option>
+            <option value="CIRCULAR_NOTICE">Circular / Notice</option>
+            <option value="OTHER">Other</option>
+        </select>
+    </div>
+    <div>
+        <label for="filter-status" class="block text-xs font-medium text-slate-500 mb-1">Status</label>
+        <select id="filter-status" onchange="filterDocuments()"
+                class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+            <option value="">All Statuses</option>
+            <option value="APPROVED">Approved</option>
+            <option value="DISCOVERED">Discovered</option>
+            <option value="CLASSIFIED">Classified</option>
+            <option value="REJECTED">Rejected</option>
+            <option value="STALE">Stale</option>
+        </select>
+    </div>
+</div>
+
+{% if not documents %}
+<!-- Empty state -->
+<div class="rounded-lg border-2 border-dashed border-slate-300 p-12 text-center">
+    <svg class="mx-auto h-12 w-12 text-slate-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+    </svg>
+    <h3 class="mt-2 text-sm font-semibold text-slate-900">No documents discovered yet</h3>
+    <p class="mt-1 text-sm text-slate-500">Run the discovery pipeline to find fee schedule documents for this exchange.</p>
+</div>
+{% else %}
+
+{# Group documents by status #}
+{% set approved_pinned = documents | selectattr('status.value', 'equalto', 'APPROVED') | selectattr('is_pinned') | list %}
+{% set approved_unpinned = documents | selectattr('status.value', 'equalto', 'APPROVED') | rejectattr('is_pinned') | list %}
+{% set discovered = documents | selectattr('status.value', 'equalto', 'DISCOVERED') | list %}
+{% set classified = documents | selectattr('status.value', 'equalto', 'CLASSIFIED') | list %}
+{% set pending = discovered + classified %}
+{% set rejected = documents | selectattr('status.value', 'equalto', 'REJECTED') | list %}
+{% set stale = documents | selectattr('status.value', 'equalto', 'STALE') | list %}
+
+<!-- Approved & Pinned -->
+{% if approved_pinned %}
+<div class="mb-8">
+    <h2 class="text-sm font-semibold text-slate-700 uppercase tracking-wider mb-3 flex items-center gap-2">
+        <svg class="h-4 w-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        Approved &amp; Pinned
+        <span class="text-xs font-normal text-slate-400">({{ approved_pinned | length }})</span>
+    </h2>
+    <div class="space-y-3">
+        {% for doc in approved_pinned %}
+        {{ render_doc_card(doc, 'green') }}
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Approved (unpinned) -->
+{% if approved_unpinned %}
+<div class="mb-8">
+    <h2 class="text-sm font-semibold text-slate-700 uppercase tracking-wider mb-3 flex items-center gap-2">
+        <svg class="h-4 w-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        Approved
+        <span class="text-xs font-normal text-slate-400">({{ approved_unpinned | length }})</span>
+    </h2>
+    <div class="space-y-3">
+        {% for doc in approved_unpinned %}
+        {{ render_doc_card(doc, 'green') }}
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Pending Review -->
+{% if pending %}
+<div class="mb-8">
+    <h2 class="text-sm font-semibold text-slate-700 uppercase tracking-wider mb-3 flex items-center gap-2">
+        <svg class="h-4 w-4 text-amber-500" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+        </svg>
+        Pending Review
+        <span class="text-xs font-normal text-slate-400">({{ pending | length }})</span>
+    </h2>
+    <div class="space-y-3">
+        {% for doc in pending %}
+        {{ render_doc_card(doc, 'amber') }}
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Rejected (collapsed by default) -->
+{% if rejected %}
+<div class="mb-8">
+    <button onclick="document.getElementById('rejected-section').classList.toggle('hidden'); this.querySelector('.chevron').classList.toggle('rotate-90')"
+            class="text-sm font-semibold text-slate-700 uppercase tracking-wider mb-3 flex items-center gap-2 hover:text-slate-900 transition-colors">
+        <svg class="h-4 w-4 chevron transition-transform" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+        </svg>
+        <svg class="h-4 w-4 text-red-500" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        Rejected
+        <span class="text-xs font-normal text-slate-400">({{ rejected | length }})</span>
+    </button>
+    <div id="rejected-section" class="hidden space-y-3">
+        {% for doc in rejected %}
+        {{ render_doc_card(doc, 'red', dimmed=true) }}
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Stale -->
+{% if stale %}
+<div class="mb-8">
+    <h2 class="text-sm font-semibold text-slate-700 uppercase tracking-wider mb-3 flex items-center gap-2">
+        <svg class="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        Stale
+        <span class="text-xs font-normal text-slate-400">({{ stale | length }})</span>
+    </h2>
+    <div class="space-y-3">
+        {% for doc in stale %}
+        {{ render_doc_card(doc, 'slate', dimmed=true) }}
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% endif %}
+
+<script>
+function filterDocuments() {
+    const category = document.getElementById('filter-category').value;
+    const status = document.getElementById('filter-status').value;
+    document.querySelectorAll('.doc-card').forEach(card => {
+        const matchCat = !category || card.dataset.category === category;
+        const matchStatus = !status || card.dataset.status === status;
+        card.style.display = (matchCat && matchStatus) ? '' : 'none';
+    });
+}
+</script>
+{% endblock %}
