@@ -190,3 +190,20 @@ class DocumentClassificationResult(BaseModel):
     doc_category: str  # One of DocumentCategory values
     confidence: float
     reasoning: str
+
+
+class ExtractedBillingCode(BaseModel):
+    """A billing code extracted from a protocol specification document."""
+
+    code: str
+    protocol: str = "OTHER"  # FIX, BINARY, SRO, OTHER
+    description: str | None = None
+    tag_number: int | None = None
+    fee_type_hint: str | None = None  # Suggested FeeType mapping
+
+
+class ProtocolExtractionResult(BaseModel):
+    """Result of parsing a protocol spec document for billing codes."""
+
+    billing_codes: list[ExtractedBillingCode]
+    extraction_notes: str = ""
