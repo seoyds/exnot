@@ -474,7 +474,7 @@ class ExchangeDocument(Base):
     source_url: Mapped[str] = mapped_column(String(500), nullable=False)
     url_pattern: Mapped[str | None] = mapped_column(String(500), nullable=True)
     title: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    content_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(100), nullable=False)
     doc_category: Mapped[DocumentCategory] = mapped_column(
         Enum(DocumentCategory), default=DocumentCategory.OTHER
     )
@@ -486,9 +486,9 @@ class ExchangeDocument(Base):
     classification_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     classification_reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
     admin_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
-    last_seen_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     last_fetched_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    discovered_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    discovered_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     approved_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
@@ -497,7 +497,7 @@ class ExchangeDocument(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
     exchange: Mapped["Exchange"] = relationship(back_populates="documents")
-    approver: Mapped["User | None"] = relationship()
+    approver: Mapped["User | None"] = relationship(foreign_keys=[approved_by])
 
 
 class ExchangeProfile(Base):
