@@ -685,6 +685,37 @@ async def logout(request: Request):
 
 
 # ---------------------------------------------------------------------------
+# Pipeline Monitor
+# ---------------------------------------------------------------------------
+
+
+@router.get("/dashboard/monitor", response_class=HTMLResponse)
+async def monitor_page(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Pipeline monitor showing recent scrape log entries."""
+    user = await _get_current_user_from_cookie(request, db)
+    if not user or not user.is_admin:
+        return RedirectResponse(
+            url="/dashboard/login?error=Admin+login+required",
+            status_code=303,
+        )
+
+    scrape_log_repo = ScrapeLogRepository(db)
+    logs = await scrape_log_repo.get_all_recent(limit=100)
+
+    return templates.TemplateResponse(
+        "monitor.html",
+        {
+            "request": request,
+            "logs": logs,
+            "user": user,
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
 # Admin panel
 # ---------------------------------------------------------------------------
 
