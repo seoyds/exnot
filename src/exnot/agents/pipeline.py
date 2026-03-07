@@ -134,7 +134,7 @@ async def run_exchange_pipeline(exchange_code: str, force: bool = False) -> list
             "validator": validator,
             "discovery": discovery,
         },
-        permission_mode="bypassPermissions",
+        permission_mode="acceptEdits",
         model=settings.claude_orchestrator_model,
     )
 
