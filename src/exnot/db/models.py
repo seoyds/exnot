@@ -153,25 +153,6 @@ class DiscoveryStatus(str, enum.Enum):
     STALE = "STALE"
 
 
-class AgentRunStatus(str, enum.Enum):
-    RUNNING = "RUNNING"
-    COMPLETED = "COMPLETED"
-    FAILED = "FAILED"
-    CANCELLED = "CANCELLED"
-
-
-class AgentEventType(str, enum.Enum):
-    PIPELINE_START = "PIPELINE_START"
-    PIPELINE_STEP = "PIPELINE_STEP"
-    AI_CALL_START = "AI_CALL_START"
-    AI_CALL_COMPLETE = "AI_CALL_COMPLETE"
-    AI_CALL_RETRY = "AI_CALL_RETRY"
-    VALIDATION_ERROR = "VALIDATION_ERROR"
-    BUDGET_WARNING = "BUDGET_WARNING"
-    PIPELINE_COMPLETE = "PIPELINE_COMPLETE"
-    PIPELINE_ERROR = "PIPELINE_ERROR"
-    CANCELLED = "CANCELLED"
-
 
 class DocumentCategory(str, enum.Enum):
     FEE_SCHEDULE = "FEE_SCHEDULE"
@@ -553,44 +534,3 @@ class ExchangeProfile(Base):
     exchange: Mapped["Exchange"] = relationship(back_populates="profile")
 
 
-class AgentRun(Base):
-    __tablename__ = "agent_runs"
-
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    exchange_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("exchanges.id"), nullable=False, index=True
-    )
-    celery_task_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    status: Mapped[AgentRunStatus] = mapped_column(Enum(AgentRunStatus), default=AgentRunStatus.RUNNING)
-    started_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    total_cost_usd: Mapped[float | None] = mapped_column(Float, nullable=True)
-    total_input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    total_output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
-
-    exchange: Mapped["Exchange"] = relationship()
-    events: Mapped[list["AgentEvent"]] = relationship(back_populates="run", order_by="AgentEvent.seq")
-
-
-class AgentEvent(Base):
-    __tablename__ = "agent_events"
-
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    run_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("agent_runs.id"), nullable=False, index=True
-    )
-    seq: Mapped[int] = mapped_column(Integer, nullable=False)
-    event_type: Mapped[AgentEventType] = mapped_column(Enum(AgentEventType), nullable=False)
-    step_name: Mapped[str] = mapped_column(String(200), nullable=False)
-    model: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    prompt_text: Mapped[str | None] = mapped_column(Text, nullable=True)
-    response_text: Mapped[str | None] = mapped_column(Text, nullable=True)
-    input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    cost_usd: Mapped[float | None] = mapped_column(Float, nullable=True)
-    latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    metadata_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-
-    run: Mapped["AgentRun"] = relationship(back_populates="events")

@@ -185,62 +185,42 @@ class UrlDiscoverer:
         return candidate
 
     async def _classify_candidates(self, candidates: list[CandidateUrl]) -> list[ClassifiedCandidate]:
-        """Classify each candidate URL into a document category using AI."""
-        from exnot.ai.agents.doc_classifier import doc_classifier_agent
-        from exnot.ai.cost import CostTracker
-        from exnot.ai.models import ModelRegistry, TaskType
+        """Classify each candidate URL into a document category.
 
-        settings = get_settings()
-        registry = ModelRegistry(settings)
-        cost_tracker = CostTracker(exchange_code="discovery", budget_usd=0.50)
+        TODO: Re-implement via Agent SDK discovery subagent.
+        Currently returns basic heuristic classifications.
+        """
         classified = []
-
         for candidate in candidates:
-            try:
-                from exnot.ai.deps import DiscoveryDeps
+            # Simple heuristic classification
+            url_lower = candidate.url.lower()
+            title_lower = (candidate.title or "").lower()
+            if any(kw in url_lower or kw in title_lower for kw in ["fee", "pricing", "schedule"]):
+                doc_category = "FEE_SCHEDULE"
+                confidence = 0.7
+                reasoning = "URL/title contains fee-related keywords"
+            elif any(kw in url_lower or kw in title_lower for kw in ["protocol", "fix", "binary", "spec"]):
+                doc_category = "PROTOCOL_SPEC"
+                confidence = 0.5
+                reasoning = "URL/title contains protocol-related keywords"
+            else:
+                doc_category = "OTHER"
+                confidence = 0.3
+                reasoning = "No strong signal detected"
 
-                prompt = (
-                    f"URL: {candidate.url}\n"
-                    f"Title: {candidate.title}\n"
-                    f"Content Type: {candidate.content_type}\n"
-                    f"Preview: {candidate.content_preview[:500] if candidate.content_preview else 'N/A'}\n"
+            classified.append(
+                ClassifiedCandidate(
+                    url=candidate.url,
+                    title=candidate.title,
+                    content_type=candidate.content_type or ("PDF" if candidate.is_pdf else "HTML"),
+                    doc_category=doc_category,
+                    classification_confidence=confidence,
+                    classification_reasoning=reasoning,
+                    content_preview=candidate.content_preview or "",
+                    is_pdf=candidate.is_pdf,
+                    is_csv=candidate.is_csv,
                 )
-                deps = DiscoveryDeps(
-                    model_registry=registry,
-                    cost_tracker=cost_tracker,
-                    exchange_code="",
-                    exchange_name="",
-                    operator="",
-                )
-                model = registry.get_model(TaskType.URL_DISCOVERY)
-                result = await doc_classifier_agent.run(prompt, model=model, deps=deps)
-                classified.append(
-                    ClassifiedCandidate(
-                        url=candidate.url,
-                        title=candidate.title,
-                        content_type=candidate.content_type or ("PDF" if candidate.is_pdf else "HTML"),
-                        doc_category=result.output.doc_category,
-                        classification_confidence=result.output.confidence,
-                        classification_reasoning=result.output.reasoning,
-                        content_preview=candidate.content_preview or "",
-                        is_pdf=candidate.is_pdf,
-                        is_csv=candidate.is_csv,
-                    )
-                )
-            except Exception:
-                classified.append(
-                    ClassifiedCandidate(
-                        url=candidate.url,
-                        title=candidate.title,
-                        content_type=candidate.content_type or "HTML",
-                        doc_category="OTHER",
-                        classification_confidence=0.0,
-                        classification_reasoning="Classification failed",
-                        content_preview=candidate.content_preview or "",
-                        is_pdf=candidate.is_pdf,
-                        is_csv=candidate.is_csv,
-                    )
-                )
+            )
 
         return classified
 
@@ -251,60 +231,50 @@ class UrlDiscoverer:
         exchange_name: str,
         operator: str,
     ) -> dict:
-        """Use the discovery agent to pick the best fee schedule URL from candidates."""
-        from exnot.ai.agents.discovery import discovery_agent
-        from exnot.ai.cost import CostTracker
-        from exnot.ai.deps import DiscoveryDeps
-        from exnot.ai.models import ModelRegistry, TaskType
+        """Evaluate candidates to pick the best fee schedule URL.
 
-        candidates_text = ""
-        for i, c in enumerate(candidates, 1):
-            candidates_text += f"\n--- Candidate {i} ---\n"
-            candidates_text += f"URL: {c.url}\n"
-            candidates_text += f"Title: {c.title}\n"
-            candidates_text += f"Snippet: {c.snippet}\n"
-            candidates_text += f"Content-Type: {c.content_type or 'unknown'}\n"
+        TODO: Re-implement via Agent SDK discovery subagent.
+        Currently uses heuristic scoring based on URL patterns and content.
+        """
+        best_url = None
+        best_score = -1
+        alternates = []
+
+        for c in candidates:
             if c.fetch_error:
-                candidates_text += f"Fetch Error: {c.fetch_error}\n"
-            elif c.content_preview:
-                preview = c.content_preview[:200]
-                candidates_text += f"Content Preview: {preview}\n"
+                continue
 
-        prompt = (
-            f"Exchange: {exchange_name} ({exchange_code})\n"
-            f"Operator: {operator}\n\n"
-            f"CANDIDATES:\n{candidates_text}\n\n"
-            f"Identify which URL(s) contain the actual, current fee schedule for this OPTIONS exchange."
-        )
+            score = 0
+            url_lower = c.url.lower()
+            title_lower = c.title.lower()
 
-        try:
-            settings = get_settings()
-            registry = ModelRegistry(settings)
-            cost_tracker = CostTracker(exchange_code=exchange_code, budget_usd=0.50)
-            deps = DiscoveryDeps(
-                model_registry=registry,
-                cost_tracker=cost_tracker,
-                exchange_code=exchange_code,
-                exchange_name=exchange_name,
-                operator=operator,
-            )
+            # Score based on URL/title content
+            if "fee" in url_lower or "fee" in title_lower:
+                score += 3
+            if "schedule" in url_lower or "schedule" in title_lower:
+                score += 2
+            if "option" in url_lower or "option" in title_lower:
+                score += 1
+            if exchange_name.lower().split()[0] in url_lower:
+                score += 2
+            if c.is_pdf:
+                score += 1
 
-            model = registry.get_model(TaskType.URL_DISCOVERY)
-            result = await discovery_agent.run(prompt, deps=deps, model=model)
+            if score > best_score:
+                if best_url:
+                    alternates.append(best_url)
+                best_url = c.url
+                best_score = score
+            elif score > 0:
+                alternates.append(c.url)
 
-            model_name = registry.get_model_name(TaskType.URL_DISCOVERY)
-            cost_tracker.record(
-                task="url_discovery",
-                model=model_name,
-                usage=result.usage(),
-            )
+        recommended_format = "PDF" if best_url and best_url.lower().endswith(".pdf") else "HTML"
+        confidence = min(best_score / 8.0, 1.0) if best_score > 0 else 0.0
 
-            logger.info(
-                f"[{exchange_code}] AI discovery: cost=${cost_tracker.total_cost_usd:.4f}, "
-                f"tokens={cost_tracker.total_tokens}"
-            )
-
-            return result.output.model_dump()
-        except Exception as e:
-            logger.error(f"[{exchange_code}] AI evaluation failed: {e}")
-            return {}
+        return {
+            "primary_url": best_url,
+            "alternate_urls": alternates[:3],
+            "recommended_format": recommended_format,
+            "reasoning": f"Heuristic scoring (best_score={best_score})",
+            "confidence": confidence,
+        }
