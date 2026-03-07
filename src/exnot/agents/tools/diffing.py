@@ -122,8 +122,8 @@ async def detect_changes(args):
                                     tier_number=db_fee.tier_level,
                                 )
                                 old_entries.append(old_entry)
-                            except Exception:
-                                pass
+                            except Exception as e:
+                                logger.warning(f"Skipping old fee entry during diff: {e}")
 
                         old_schedule = NormalizedFeeSchedule(
                             exchange_code=exchange_code,

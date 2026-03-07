@@ -54,6 +54,7 @@ class Settings(BaseSettings):
     claude_discovery_model: str = "haiku"
 
     # Document settings
+    section_char_budget: int = 15000
     doc_auto_approve_threshold: float = 0.9
     discovery_include_protocol_specs: bool = True
 

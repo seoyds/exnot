@@ -66,9 +66,11 @@ async def save_snapshot(args):
                     ]
                 }
 
-            # Get next version
+            # Get next version and previous snapshot BEFORE creating new one
             snapshot_repo = SnapshotRepository(session)
             next_version = await snapshot_repo.get_next_version(exchange.id)
+            old_snapshot = await snapshot_repo.get_latest(exchange.id)
+            old_snapshot_id = old_snapshot.id if old_snapshot else None
 
             # Create snapshot
             snapshot = FeeScheduleSnapshot(
@@ -126,10 +128,6 @@ async def save_snapshot(args):
 
             # Bulk insert change records
             change_records = []
-            old_snapshot = await snapshot_repo.get_latest(exchange.id)
-            old_snapshot_id = None
-            if old_snapshot and old_snapshot.id != snapshot.id:
-                old_snapshot_id = old_snapshot.id
 
             for c in changes:
                 try:

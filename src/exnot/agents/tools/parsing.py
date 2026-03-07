@@ -83,7 +83,7 @@ async def parse_document(args):
         fee_sections = [s for s in sections if not s.is_context]
         context_sections = [s for s in sections if s.is_context]
         section_groups = group_sections(
-            fee_sections, char_budget=settings.ai_section_char_budget
+            fee_sections, char_budget=settings.section_char_budget
         )
 
         # Build serializable result
