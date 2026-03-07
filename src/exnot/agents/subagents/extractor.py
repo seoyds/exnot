@@ -2,7 +2,7 @@
 
 from claude_agent_sdk import AgentDefinition
 
-from exnot.ai.prompts.registry import get_extraction_prompt
+from exnot.agents.prompts.registry import get_extraction_prompt
 from exnot.config import get_settings
 
 BASE_EXTRACTION_PROMPT = """\

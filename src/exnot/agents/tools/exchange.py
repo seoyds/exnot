@@ -54,7 +54,7 @@ async def load_exchange(args):
 )
 async def load_exchange_prompt(args):
     try:
-        from exnot.ai.prompts.registry import get_extraction_prompt
+        from exnot.agents.prompts.registry import get_extraction_prompt
 
         exchange_code = args["exchange_code"]
         prompt = get_extraction_prompt(exchange_code)
