@@ -2,6 +2,8 @@
 
 import asyncio
 import logging
+from collections.abc import AsyncIterator
+from typing import Any
 
 from claude_agent_sdk import (
     AssistantMessage,
@@ -11,6 +13,7 @@ from claude_agent_sdk import (
     UserMessage,
     query,
 )
+from claude_agent_sdk.types import PermissionResultAllow, ToolPermissionContext
 
 from exnot.agents.subagents import (
     create_discovery_agent,
@@ -21,6 +24,13 @@ from exnot.agents.tools.server import create_tools_server
 from exnot.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+
+async def _auto_approve_tool(
+    tool_name: str, tool_input: dict, context: ToolPermissionContext
+) -> PermissionResultAllow:
+    """Auto-approve all tool calls — required for headless execution in Docker."""
+    return PermissionResultAllow()
 
 ORCHESTRATOR_SYSTEM_PROMPT = """\
 You are ExNot, an automated pipeline coordinator for US options exchange fee schedule processing.
@@ -124,6 +134,10 @@ async def run_exchange_pipeline(exchange_code: str, force: bool = False) -> list
     validator = create_validator_agent()
     discovery = create_discovery_agent()
 
+    # Capture stderr for debugging
+    def _log_stderr(line: str) -> None:
+        logger.warning("SDK stderr [%s]: %s", exchange_code, line.rstrip())
+
     # Build agent options
     options = ClaudeAgentOptions(
         system_prompt=ORCHESTRATOR_SYSTEM_PROMPT,
@@ -134,22 +148,27 @@ async def run_exchange_pipeline(exchange_code: str, force: bool = False) -> list
             "validator": validator,
             "discovery": discovery,
         },
-        permission_mode="acceptEdits",
+        permission_mode="default",
+        can_use_tool=_auto_approve_tool,
         model=settings.claude_orchestrator_model,
+        stderr=_log_stderr,
     )
 
-    # Build the user prompt
-    prompt = (
+    # Build the user prompt as an async iterable (required for can_use_tool callback)
+    prompt_text = (
         f"Process fee schedule for exchange: {exchange_code}\n"
         f"Force re-process: {force}\n\n"
         "Execute the full pipeline following the execution rules."
     )
 
+    async def prompt_stream() -> AsyncIterator[dict[str, Any]]:
+        yield {"type": "user", "message": {"role": "user", "content": prompt_text}}
+
     messages: list = []
 
     logger.info("Starting pipeline for exchange=%s force=%s", exchange_code, force)
 
-    async for message in query(prompt=prompt, options=options):
+    async for message in query(prompt=prompt_stream(), options=options):
         messages.append(message)
 
         # Log based on message type
