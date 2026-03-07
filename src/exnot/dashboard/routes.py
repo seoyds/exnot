@@ -37,6 +37,7 @@ from exnot.db.repositories import (
     FeeChangeRepository,
     NormalizedFeeRepository,
     ScrapedDocumentRepository,
+    ScrapeLogRepository,
     SnapshotRepository,
     SubscriberRepository,
     UserRepository,
@@ -921,6 +922,107 @@ async def monitor_stop_all(
         url=f"/dashboard/monitor?success=Cancelled+{cancelled_count}+run(s)",
         status_code=303,
     )
+
+
+# ---------------------------------------------------------------------------
+# Admin panel
+# ---------------------------------------------------------------------------
+
+
+@router.get("/dashboard/admin", response_class=HTMLResponse)
+async def admin_page(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin panel for scrape management and logs."""
+    user = await _get_current_user_from_cookie(request, db)
+    if not user or not user.is_admin:
+        return RedirectResponse(
+            url="/dashboard/login?error=Admin+login+required",
+            status_code=303,
+        )
+
+    exchange_repo = ExchangeRepository(db)
+    exchanges = await exchange_repo.get_all(active_only=True)
+
+    scrape_log_repo = ScrapeLogRepository(db)
+    scrape_logs = await scrape_log_repo.get_all_recent(limit=50)
+
+    return templates.TemplateResponse(
+        "admin.html",
+        {
+            "request": request,
+            "exchanges": exchanges,
+            "scrape_logs": scrape_logs,
+            "user": user,
+            "message": request.query_params.get("message"),
+        },
+    )
+
+
+@router.post("/dashboard/admin/scrape-all")
+async def admin_scrape_all(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Trigger a scrape for all active exchanges from the admin panel."""
+    user = await _get_current_user_from_cookie(request, db)
+    if not user or not user.is_admin:
+        return RedirectResponse(
+            url="/dashboard/login?error=Admin+login+required",
+            status_code=303,
+        )
+
+    try:
+        from exnot.workers.tasks import daily_fee_schedule_check
+
+        daily_fee_schedule_check.delay()
+        return RedirectResponse(
+            url="/dashboard/admin?message=Scrape+triggered+for+all+exchanges",
+            status_code=303,
+        )
+    except Exception as e:
+        return RedirectResponse(
+            url=f"/dashboard/admin?message=Failed+to+trigger+scrape:+{e}",
+            status_code=303,
+        )
+
+
+@router.post("/dashboard/admin/scrape/{code}")
+async def admin_scrape_exchange(
+    code: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Trigger a scrape for a single exchange from the admin panel."""
+    user = await _get_current_user_from_cookie(request, db)
+    if not user or not user.is_admin:
+        return RedirectResponse(
+            url="/dashboard/login?error=Admin+login+required",
+            status_code=303,
+        )
+
+    exchange_repo = ExchangeRepository(db)
+    exchange = await exchange_repo.get_by_code(code.upper())
+    if not exchange:
+        return RedirectResponse(
+            url=f"/dashboard/admin?message=Exchange+{code}+not+found",
+            status_code=303,
+        )
+
+    try:
+        from exnot.workers.tasks import scrape_and_process_exchange
+
+        scrape_and_process_exchange.delay(code.upper())
+        return RedirectResponse(
+            url=f"/dashboard/admin?message=Scrape+triggered+for+{code.upper()}",
+            status_code=303,
+        )
+    except Exception as e:
+        return RedirectResponse(
+            url=f"/dashboard/admin?message=Failed+to+trigger+scrape:+{e}",
+            status_code=303,
+        )
 
 
 # ---------------------------------------------------------------------------

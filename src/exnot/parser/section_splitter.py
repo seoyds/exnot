@@ -317,9 +317,10 @@ def classify_context_sections(
 ) -> list[DocumentSection]:
     """Mark sections as context (definitions/footnotes/appendix) vs fee-bearing.
 
-    Only keyword-matched sections are marked as context. Sections without
-    dollar amounts are left as fee sections — they may contain text that
-    describes fees without explicit amounts, which the AI should still see.
+    Sections matching context keywords (footnote, glossary, etc.) are marked
+    as context UNLESS they contain dollar amounts or fee tables — in that case
+    they carry actual fee data (e.g. tiered fee tables inside footnotes) and
+    must be extracted by the AI.
     """
     for section in sections:
         heading_lower = section.heading.lower()
@@ -328,7 +329,14 @@ def classify_context_sections(
 
         # Only mark as context if heading/text explicitly matches context keywords
         if any(kw in combined for kw in CONTEXT_KEYWORDS):
-            section.is_context = True
+            # Check if the section contains fee data (dollar amounts or tables)
+            has_dollar_amounts = bool(DOLLAR_PATTERN.search(section.text))
+            has_tables = bool(section.tables)
+            if has_dollar_amounts or has_tables:
+                # Fee-bearing footnote/appendix — keep as extractable section
+                section.is_context = False
+            else:
+                section.is_context = True
 
     return sections
 

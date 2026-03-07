@@ -8,6 +8,7 @@ Create Date: 2026-03-05 12:00:00.000000
 from collections.abc import Sequence
 
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 from alembic import op
 
@@ -19,36 +20,35 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    # --- Enum types ---
-    documentcategory = sa.Enum(
-        "FEE_SCHEDULE",
-        "PROTOCOL_SPEC",
-        "REGULATORY_FILING",
-        "MEMBERSHIP_AGREEMENT",
-        "CIRCULAR_NOTICE",
-        "OTHER",
-        name="documentcategory",
+    # --- Enum types (create if not exists) ---
+    documentcategory = postgresql.ENUM(
+        "FEE_SCHEDULE", "PROTOCOL_SPEC", "REGULATORY_FILING",
+        "MEMBERSHIP_AGREEMENT", "CIRCULAR_NOTICE", "OTHER",
+        name="documentcategory", create_type=False,
     )
     documentcategory.create(op.get_bind(), checkfirst=True)
 
-    documentstatus = sa.Enum(
-        "DISCOVERED",
-        "CLASSIFIED",
-        "APPROVED",
-        "REJECTED",
-        "STALE",
-        name="documentstatus",
+    documentstatus = postgresql.ENUM(
+        "DISCOVERED", "CLASSIFIED", "APPROVED", "REJECTED", "STALE",
+        name="documentstatus", create_type=False,
     )
     documentstatus.create(op.get_bind(), checkfirst=True)
 
-    billingprotocol = sa.Enum(
-        "FIX",
-        "BINARY",
-        "SRO",
-        "OTHER",
-        name="billingprotocol",
+    billingprotocol = postgresql.ENUM(
+        "FIX", "BINARY", "SRO", "OTHER",
+        name="billingprotocol", create_type=False,
     )
     billingprotocol.create(op.get_bind(), checkfirst=True)
+
+    # --- Ensure feetype enum exists (may already exist from another migration) ---
+    feetype = sa.Enum(
+        "MAKER", "TAKER", "ROUTING", "ORF", "TRANSACTION", "CLEARING",
+        "CONNECTIVITY", "MARKET_DATA", "MEMBERSHIP", "CROSSING_FEE",
+        "PIM_FEE", "RESPONSE_FEE", "BREAK_UP_REBATE", "SURCHARGE",
+        "CANCELLATION", "STOCK_HANDLING",
+        name="feetype",
+    )
+    feetype.create(op.get_bind(), checkfirst=True)
 
     # --- canonical_fees table (must be created before tables that reference it) ---
     op.create_table(
@@ -58,25 +58,13 @@ def upgrade() -> None:
         sa.Column("display_name", sa.String(length=100), nullable=False),
         sa.Column(
             "fee_type",
-            sa.Enum(
-                "MAKER",
-                "TAKER",
-                "ROUTING",
-                "ORF",
-                "TRANSACTION",
-                "CLEARING",
-                "CONNECTIVITY",
-                "MARKET_DATA",
-                "MEMBERSHIP",
-                "CROSSING_FEE",
-                "PIM_FEE",
-                "RESPONSE_FEE",
-                "BREAK_UP_REBATE",
-                "SURCHARGE",
-                "CANCELLATION",
-                "STOCK_HANDLING",
+            postgresql.ENUM(
+                "MAKER", "TAKER", "ROUTING", "ORF", "TRANSACTION", "CLEARING",
+                "CONNECTIVITY", "MARKET_DATA", "MEMBERSHIP", "CROSSING_FEE",
+                "PIM_FEE", "RESPONSE_FEE", "BREAK_UP_REBATE", "SURCHARGE",
+                "CANCELLATION", "STOCK_HANDLING",
                 name="feetype",
-                create_constraint=False,
+                create_type=False,
             ),
             nullable=False,
         ),

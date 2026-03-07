@@ -343,12 +343,9 @@
                      data-order="{{ fee.order_type.value }}"
                      data-feetype="{{ fee.fee_type.value }}"
                      data-search="{{ fee.fee_code or '' }} {{ fee.description or '' }} {{ fee.fee_name or '' }} {{ fee.section_ref or '' }}">
-                    <!-- Row 1: Fee code + Amount -->
+                    <!-- Row 1: Fee Type + Amount -->
                     <div class="flex items-center justify-between mb-2">
                         <div class="flex items-center gap-2">
-                            {% if fee.fee_code %}
-                            <span class="inline-flex items-center rounded bg-slate-100 px-1.5 py-0.5 text-xs font-bold font-mono text-slate-700">{{ fee.fee_code }}</span>
-                            {% endif %}
                             <span class="text-sm font-medium text-slate-900">{{ fee.fee_type.value | replace('_', ' ') | title }}</span>
                         </div>
                         <span class="text-sm font-mono font-semibold {% if fee.is_rebate %}text-green-700{% else %}text-red-700{% endif %}">
@@ -463,24 +460,21 @@
                     <thead class="bg-slate-50">
                         <tr>
                             <th scope="col" class="px-3 lg:px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 cursor-pointer hover:text-slate-700 select-none" onclick="sortTable(0)">
-                                Code <svg class="inline h-3 w-3 ml-0.5 opacity-40" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" /></svg>
-                            </th>
-                            <th scope="col" class="px-3 lg:px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 cursor-pointer hover:text-slate-700 select-none" onclick="sortTable(1)">
                                 Participant <svg class="inline h-3 w-3 ml-0.5 opacity-40" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" /></svg>
                             </th>
-                            <th scope="col" class="px-3 lg:px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 cursor-pointer hover:text-slate-700 select-none" onclick="sortTable(2)">
+                            <th scope="col" class="px-3 lg:px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 cursor-pointer hover:text-slate-700 select-none" onclick="sortTable(1)">
                                 Contra <svg class="inline h-3 w-3 ml-0.5 opacity-40" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" /></svg>
                             </th>
-                            <th scope="col" class="px-3 lg:px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 cursor-pointer hover:text-slate-700 select-none" onclick="sortTable(3)">
+                            <th scope="col" class="px-3 lg:px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 cursor-pointer hover:text-slate-700 select-none" onclick="sortTable(2)">
                                 Security <svg class="inline h-3 w-3 ml-0.5 opacity-40" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" /></svg>
                             </th>
-                            <th scope="col" class="px-3 lg:px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 cursor-pointer hover:text-slate-700 select-none" onclick="sortTable(4)">
+                            <th scope="col" class="px-3 lg:px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 cursor-pointer hover:text-slate-700 select-none" onclick="sortTable(3)">
                                 Order <svg class="inline h-3 w-3 ml-0.5 opacity-40" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" /></svg>
                             </th>
-                            <th scope="col" class="px-3 lg:px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 cursor-pointer hover:text-slate-700 select-none" onclick="sortTable(5)">
+                            <th scope="col" class="px-3 lg:px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 cursor-pointer hover:text-slate-700 select-none" onclick="sortTable(4)">
                                 Fee Type <svg class="inline h-3 w-3 ml-0.5 opacity-40" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" /></svg>
                             </th>
-                            <th scope="col" class="px-3 lg:px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-slate-500 cursor-pointer hover:text-slate-700 select-none" onclick="sortTable(6)">
+                            <th scope="col" class="px-3 lg:px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-slate-500 cursor-pointer hover:text-slate-700 select-none" onclick="sortTable(5)">
                                 Amount <svg class="inline h-3 w-3 ml-0.5 opacity-40" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" /></svg>
                             </th>
                             <th scope="col" class="px-3 lg:px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Fee Code</th>
@@ -498,13 +492,6 @@
                             data-order="{{ fee.order_type.value }}"
                             data-feetype="{{ fee.fee_type.value }}"
                             data-search="{{ fee.fee_code or '' }} {{ fee.description or '' }} {{ fee.fee_name or '' }} {{ fee.section_ref or '' }}">
-                            <td class="whitespace-nowrap px-3 lg:px-4 py-3 text-sm font-mono text-slate-600">
-                                {% if fee.fee_code %}
-                                <span class="inline-flex items-center rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-700">{{ fee.fee_code }}</span>
-                                {% else %}
-                                <span class="text-slate-300">&mdash;</span>
-                                {% endif %}
-                            </td>
                             <td class="whitespace-nowrap px-3 lg:px-4 py-3 text-sm text-slate-900">
                                 {{ fee.participant_type.value | replace('_', ' ') | title }}
                             </td>

@@ -282,6 +282,18 @@ class ScrapeLogRepository:
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+    async def get_all_recent(self, limit: int = 50) -> list[ScrapeLog]:
+        from sqlalchemy.orm import selectinload
+
+        stmt = (
+            select(ScrapeLog)
+            .options(selectinload(ScrapeLog.exchange))
+            .order_by(ScrapeLog.started_at.desc())
+            .limit(limit)
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
 
 class ExchangeProfileRepository:
     """Data access for exchange profiles."""

@@ -120,10 +120,10 @@
                         {{ log.started_at.strftime('%Y-%m-%d %H:%M') if log.started_at else '-' }}
                     </td>
                     <td class="whitespace-nowrap px-4 py-3 text-sm">
-                        <a href="/dashboard/exchanges/{{ log.exchange_code }}" class="text-indigo-600 hover:text-indigo-500 font-medium">
-                            {{ log.exchange_code }}
+                        <a href="/dashboard/exchanges/{{ log.exchange.code }}" class="text-indigo-600 hover:text-indigo-500 font-medium">
+                            {{ log.exchange.code }}
                         </a>
-                        <span class="block text-xs text-gray-400">{{ log.exchange_name }}</span>
+                        <span class="block text-xs text-gray-400">{{ log.exchange.name }}</span>
                     </td>
                     <td class="whitespace-nowrap px-4 py-3 text-sm">
                         {% if log.status == 'SUCCESS' %}
