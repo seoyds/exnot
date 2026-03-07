@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+
+{% block title %}Claude SDK Auth{% endblock %}
+
+{% block header %}
+<header class="bg-white dark:bg-slate-900 shadow-sm dark:shadow-slate-800/50">
+    <div class="mx-auto max-w-7xl px-4 py-4 sm:py-6 sm:px-6 lg:px-8">
+        <div>
+            <h1 class="text-xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Claude Agent SDK Authentication</h1>
+            <p class="mt-1 text-xs sm:text-sm text-slate-500 dark:text-slate-400">Manage Claude SDK credentials for the extraction pipeline.</p>
+        </div>
+    </div>
+</header>
+{% endblock %}
+
+{% block content %}
+{% if message %}
+<div class="mb-6 rounded-lg bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 p-4">
+    <p class="text-sm font-medium text-blue-800 dark:text-blue-200">{{ message }}</p>
+</div>
+{% endif %}
+{% if error %}
+<div class="mb-6 rounded-lg bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 p-4">
+    <p class="text-sm font-medium text-red-800 dark:text-red-200">{{ error }}</p>
+</div>
+{% endif %}
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+    <!-- Status Card -->
+    <div class="rounded-lg bg-white dark:bg-slate-900 shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+        <div class="px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
+            <h2 class="text-lg font-semibold text-slate-900 dark:text-slate-100">Auth Status</h2>
+        </div>
+        <div class="p-6 space-y-4">
+            <!-- Credentials file -->
+            <div class="flex items-center justify-between">
+                <span class="text-sm text-slate-600 dark:text-slate-400">Credentials file</span>
+                {% if auth_status.credentials_exist %}
+                <span class="inline-flex items-center gap-1.5 rounded-full bg-green-100 dark:bg-green-900/50 px-2.5 py-1 text-xs font-medium text-green-800 dark:text-green-300">
+                    <span class="h-1.5 w-1.5 rounded-full bg-green-500"></span>
+                    Found
+                </span>
+                {% else %}
+                <span class="inline-flex items-center gap-1.5 rounded-full bg-red-100 dark:bg-red-900/50 px-2.5 py-1 text-xs font-medium text-red-800 dark:text-red-300">
+                    <span class="h-1.5 w-1.5 rounded-full bg-red-500"></span>
+                    Missing
+                </span>
+                {% endif %}
+            </div>
+
+            <!-- Credentials path -->
+            <div class="flex items-center justify-between">
+                <span class="text-sm text-slate-600 dark:text-slate-400">Path</span>
+                <code class="text-xs text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">{{ auth_status.credentials_path }}</code>
+            </div>
+
+            {% if auth_status.credentials_exist %}
+            <!-- Token type -->
+            <div class="flex items-center justify-between">
+                <span class="text-sm text-slate-600 dark:text-slate-400">Auth type</span>
+                <span class="text-sm font-medium text-slate-900 dark:text-slate-100">{{ auth_status.auth_type }}</span>
+            </div>
+
+            <!-- Last modified -->
+            <div class="flex items-center justify-between">
+                <span class="text-sm text-slate-600 dark:text-slate-400">Last modified</span>
+                <span class="text-sm text-slate-900 dark:text-slate-100">{{ auth_status.last_modified }}</span>
+            </div>
+
+            <!-- File size -->
+            <div class="flex items-center justify-between">
+                <span class="text-sm text-slate-600 dark:text-slate-400">File size</span>
+                <span class="text-sm text-slate-900 dark:text-slate-100">{{ auth_status.file_size }} bytes</span>
+            </div>
+            {% endif %}
+
+            <!-- Node.js -->
+            <div class="flex items-center justify-between border-t border-slate-100 dark:border-slate-800 pt-4">
+                <span class="text-sm text-slate-600 dark:text-slate-400">Node.js</span>
+                {% if auth_status.node_available %}
+                <span class="inline-flex items-center gap-1.5 rounded-full bg-green-100 dark:bg-green-900/50 px-2.5 py-1 text-xs font-medium text-green-800 dark:text-green-300">
+                    <span class="h-1.5 w-1.5 rounded-full bg-green-500"></span>
+                    {{ auth_status.node_version }}
+                </span>
+                {% else %}
+                <span class="inline-flex items-center gap-1.5 rounded-full bg-red-100 dark:bg-red-900/50 px-2.5 py-1 text-xs font-medium text-red-800 dark:text-red-300">
+                    <span class="h-1.5 w-1.5 rounded-full bg-red-500"></span>
+                    Not found
+                </span>
+                {% endif %}
+            </div>
+
+            <!-- SDK installed -->
+            <div class="flex items-center justify-between">
+                <span class="text-sm text-slate-600 dark:text-slate-400">claude-agent-sdk</span>
+                {% if auth_status.sdk_version %}
+                <span class="inline-flex items-center gap-1.5 rounded-full bg-green-100 dark:bg-green-900/50 px-2.5 py-1 text-xs font-medium text-green-800 dark:text-green-300">
+                    <span class="h-1.5 w-1.5 rounded-full bg-green-500"></span>
+                    v{{ auth_status.sdk_version }}
+                </span>
+                {% else %}
+                <span class="inline-flex items-center gap-1.5 rounded-full bg-red-100 dark:bg-red-900/50 px-2.5 py-1 text-xs font-medium text-red-800 dark:text-red-300">
+                    <span class="h-1.5 w-1.5 rounded-full bg-red-500"></span>
+                    Not installed
+                </span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Upload Card -->
+    <div class="rounded-lg bg-white dark:bg-slate-900 shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+        <div class="px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
+            <h2 class="text-lg font-semibold text-slate-900 dark:text-slate-100">Upload Credentials</h2>
+        </div>
+        <div class="p-6">
+            <p class="text-sm text-slate-600 dark:text-slate-400 mb-4">
+                Paste the contents of your <code class="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-xs">~/.claude/.credentials.json</code> file from a machine where you've authenticated with <code class="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-xs">claude auth login</code>.
+            </p>
+
+            <form method="post" action="/dashboard/admin/claude-auth/upload">
+                <label for="credentials_json" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                    Credentials JSON
+                </label>
+                <textarea
+                    id="credentials_json"
+                    name="credentials_json"
+                    rows="8"
+                    class="w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 font-mono placeholder-slate-400 dark:placeholder-slate-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                    placeholder='{"claudeAiOauth": {"accessToken": "...", ...}}'
+                    required
+                ></textarea>
+
+                <div class="mt-4 flex items-center gap-3">
+                    <button type="submit"
+                            class="inline-flex items-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 transition-colors"
+                            onclick="return confirm('This will overwrite the existing credentials file. Continue?');">
+                        <svg class="mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                        </svg>
+                        Upload Credentials
+                    </button>
+                </div>
+            </form>
+
+            <div class="mt-6 border-t border-slate-200 dark:border-slate-700 pt-4">
+                <h3 class="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">How to get credentials</h3>
+                <ol class="text-xs text-slate-500 dark:text-slate-400 space-y-1 list-decimal list-inside">
+                    <li>On a machine with Claude CLI installed, run: <code class="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded">claude auth login</code></li>
+                    <li>Complete the OAuth flow in your browser</li>
+                    <li>Copy the contents of <code class="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded">~/.claude/.credentials.json</code></li>
+                    <li>Paste it above and click Upload</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

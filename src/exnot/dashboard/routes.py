@@ -817,6 +817,155 @@ async def admin_scrape_exchange(
 
 
 # ---------------------------------------------------------------------------
+# Claude Agent SDK Auth
+# ---------------------------------------------------------------------------
+
+
+def _get_claude_auth_status() -> dict:
+    """Check Claude Agent SDK auth status."""
+    import shutil
+    import subprocess
+    from pathlib import Path
+
+    credentials_path = Path.home() / ".claude" / ".credentials.json"
+    status = {
+        "credentials_exist": credentials_path.exists(),
+        "credentials_path": str(credentials_path),
+        "auth_type": "Unknown",
+        "last_modified": None,
+        "file_size": 0,
+        "node_available": False,
+        "node_version": None,
+        "sdk_version": None,
+    }
+
+    if credentials_path.exists():
+        import json
+        from datetime import datetime
+
+        stat = credentials_path.stat()
+        status["file_size"] = stat.st_size
+        status["last_modified"] = datetime.fromtimestamp(stat.st_mtime).strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+        try:
+            data = json.loads(credentials_path.read_text())
+            if "claudeAiOauth" in data:
+                status["auth_type"] = "OAuth (Claude subscription)"
+            elif "apiKey" in data:
+                status["auth_type"] = "API Key"
+            else:
+                status["auth_type"] = "Unknown format"
+        except Exception:
+            status["auth_type"] = "Invalid JSON"
+
+    # Check Node.js
+    if shutil.which("node"):
+        try:
+            result = subprocess.run(
+                ["node", "--version"], capture_output=True, text=True, timeout=5
+            )
+            if result.returncode == 0:
+                status["node_available"] = True
+                status["node_version"] = result.stdout.strip()
+        except Exception:
+            pass
+
+    # Check SDK
+    try:
+        import claude_agent_sdk
+
+        status["sdk_version"] = getattr(claude_agent_sdk, "__version__", "installed")
+    except ImportError:
+        pass
+
+    return status
+
+
+@router.get("/dashboard/admin/claude-auth", response_class=HTMLResponse)
+async def claude_auth_page(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Claude Agent SDK authentication management page."""
+    user = await _get_current_user_from_cookie(request, db)
+    if not user or not user.is_admin:
+        return RedirectResponse(
+            url="/dashboard/login?error=Admin+login+required",
+            status_code=303,
+        )
+
+    auth_status = _get_claude_auth_status()
+    return templates.TemplateResponse(
+        "claude_auth.html",
+        {
+            "request": request,
+            "auth_status": auth_status,
+            "user": user,
+            "message": request.query_params.get("message"),
+            "error": request.query_params.get("error"),
+        },
+    )
+
+
+@router.post("/dashboard/admin/claude-auth/upload")
+async def claude_auth_upload(
+    request: Request,
+    credentials_json: str = Form(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Upload Claude credentials JSON."""
+    import json
+    from pathlib import Path
+
+    user = await _get_current_user_from_cookie(request, db)
+    if not user or not user.is_admin:
+        return RedirectResponse(
+            url="/dashboard/login?error=Admin+login+required",
+            status_code=303,
+        )
+
+    # Validate JSON
+    try:
+        data = json.loads(credentials_json.strip())
+    except json.JSONDecodeError as e:
+        return RedirectResponse(
+            url=f"/dashboard/admin/claude-auth?error=Invalid+JSON:+{e}",
+            status_code=303,
+        )
+
+    # Basic validation
+    if not isinstance(data, dict):
+        return RedirectResponse(
+            url="/dashboard/admin/claude-auth?error=Credentials+must+be+a+JSON+object",
+            status_code=303,
+        )
+
+    if "claudeAiOauth" not in data and "apiKey" not in data:
+        return RedirectResponse(
+            url="/dashboard/admin/claude-auth?error=Missing+claudeAiOauth+or+apiKey+field",
+            status_code=303,
+        )
+
+    # Write credentials
+    credentials_path = Path.home() / ".claude" / ".credentials.json"
+    try:
+        credentials_path.parent.mkdir(parents=True, exist_ok=True)
+        credentials_path.write_text(json.dumps(data, indent=2))
+        credentials_path.chmod(0o600)
+    except Exception as e:
+        return RedirectResponse(
+            url=f"/dashboard/admin/claude-auth?error=Failed+to+write+credentials:+{e}",
+            status_code=303,
+        )
+
+    return RedirectResponse(
+        url="/dashboard/admin/claude-auth?message=Credentials+uploaded+successfully",
+        status_code=303,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Exchange documents review
 # ---------------------------------------------------------------------------
 
