@@ -8,11 +8,11 @@ exnot.db.engine.get_sync_session().
 import asyncio
 import json
 import logging
-from dataclasses import asdict
 from datetime import datetime, timedelta
 
 from sqlalchemy import delete, select
 
+from exnot.agents.pipeline import run_exchange_pipeline_sync
 from exnot.db.engine import get_sync_session
 from exnot.db.models import (
     DiscoveryStatus,
@@ -27,7 +27,6 @@ from exnot.db.models import (
 from exnot.differ.detector import ChangeReport, FeeChangeEntry
 from exnot.notifications.email_sender import EmailSender
 from exnot.workers.celery_app import celery_app
-from exnot.workers.pipelines import run_scrape_pipeline
 
 logger = logging.getLogger(__name__)
 
@@ -155,41 +154,32 @@ def scrape_and_process_exchange(self, exchange_code: str, force: bool = False):
 
     logger.info(f"[{exchange_code}] Starting scrape and process pipeline")
 
-    session = get_sync_session()
     try:
-        change_report = run_scrape_pipeline(exchange_code, session, celery_task_id=self.request.id, force=force)
-        session.commit()
+        # The new SDK pipeline handles DB persistence and notifications internally via tools
+        messages = run_exchange_pipeline_sync(exchange_code, force=force)
 
-        if change_report is not None and change_report.has_changes:
-            logger.info(f"[{exchange_code}] {len(change_report.changes)} changes detected, triggering notifications")
-            # Serialize the change report for the notification task
-            report_json = json.dumps(asdict(change_report))
-            send_change_notifications.delay(exchange_code, report_json)
-        elif change_report is None:
-            logger.info(f"[{exchange_code}] No changes (document unchanged or inactive)")
-        else:
-            logger.info(f"[{exchange_code}] Pipeline complete, no fee changes detected")
+        logger.info(f"[{exchange_code}] Pipeline complete with {len(messages)} SDK messages")
 
         return {
             "exchange_code": exchange_code,
-            "has_changes": change_report is not None and change_report.has_changes,
-            "change_count": len(change_report.changes) if change_report else 0,
+            "message_count": len(messages),
         }
 
     except Exception as exc:
-        session.rollback()
         logger.exception(f"[{exchange_code}] Error in scrape_and_process_exchange")
 
         # Record failure in scrape log
+        session = get_sync_session()
         try:
             _record_failure_log(exchange_code, session, str(exc))
             session.commit()
         except Exception:
             logger.exception(f"[{exchange_code}] Failed to record error scrape log")
+        finally:
+            session.close()
 
         raise
     finally:
-        session.close()
         try:
             lock.release()
         except Exception:
