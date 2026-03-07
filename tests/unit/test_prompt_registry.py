@@ -1,6 +1,6 @@
 """Tests for the per-exchange prompt registry."""
 
-from exnot.ai.prompts.registry import EXCHANGE_PROMPTS, get_extraction_prompt
+from exnot.agents.prompts.registry import EXCHANGE_PROMPTS, get_extraction_prompt
 
 
 class TestPromptRegistry:

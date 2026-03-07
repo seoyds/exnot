@@ -5,7 +5,6 @@ with all external services mocked at the boundary.
 """
 
 from decimal import Decimal
-from unittest.mock import patch
 
 from exnot.differ.detector import ChangeDetector
 from exnot.normalizer.engine import NormalizationEngine
@@ -15,7 +14,7 @@ from exnot.normalizer.schema import (
     ParticipantType,
     SecurityClass,
 )
-from exnot.parser.ai_extractor import AIExtractor, ExtractionResult
+from exnot.parser.ai_extractor import ExtractionResult
 from exnot.parser.html_parser import HtmlParser
 
 # ---------------------------------------------------------------------------
@@ -409,14 +408,10 @@ class TestAIExtraction:
     def test_confidence_in_range(self):
         assert 0.0 <= MOCK_EXTRACTION_RESULT.confidence <= 1.0
 
-    @patch.object(AIExtractor, "extract", return_value=MOCK_EXTRACTION_RESULT)
-    def test_extractor_returns_mock(self, mock_extract):
-        parser = HtmlParser()
-        doc = parser.extract(NASDAQ_ISE_HTML)
-        extractor = AIExtractor()
-        result = extractor.extract(doc, EXCHANGE_CODE)
-        assert result is MOCK_EXTRACTION_RESULT
-        mock_extract.assert_called_once()
+    def test_mock_extraction_result_shape(self):
+        """Verify mock extraction result has the expected shape."""
+        assert MOCK_EXTRACTION_RESULT.exchange_name == "Nasdaq ISE"
+        assert len(MOCK_EXTRACTION_RESULT.raw_fees) == 28
 
 
 # ---------------------------------------------------------------------------
@@ -648,16 +643,14 @@ class TestChangeDetection:
 class TestFullPipelineIntegration:
     """Chain all steps together: Parse → Extract (mock) → Normalize → Diff."""
 
-    @patch.object(AIExtractor, "extract", return_value=MOCK_EXTRACTION_RESULT)
-    def test_full_pipeline_first_run(self, mock_extract):
+    def test_full_pipeline_first_run(self):
         # Step 1: Parse HTML
         parser = HtmlParser()
         document = parser.extract(NASDAQ_ISE_HTML)
         assert len(document.tables) >= 3
 
-        # Step 2: AI extraction (mocked)
-        extractor = AIExtractor()
-        extraction = extractor.extract(document, EXCHANGE_CODE)
+        # Step 2: Use mock extraction result
+        extraction = MOCK_EXTRACTION_RESULT
         assert len(extraction.raw_fees) == 28
 
         # Step 3: Normalize
@@ -678,31 +671,25 @@ class TestFullPipelineIntegration:
         assert report.new_count == 28
         assert report.exchange_code == EXCHANGE_CODE
 
-    @patch.object(AIExtractor, "extract", return_value=MOCK_EXTRACTION_RESULT)
-    def test_full_pipeline_second_run_with_changes(self, mock_extract):
+    def test_full_pipeline_second_run_with_changes(self):
         """Simulate two runs where the second has a fee change."""
-        parser = HtmlParser()
         normalizer = NormalizationEngine()
         detector = ChangeDetector()
 
         # --- Run 1 ---
-        doc1 = parser.extract(NASDAQ_ISE_HTML)
-        extractor = AIExtractor()
-        extraction1 = extractor.extract(doc1, EXCHANGE_CODE)
-        schedule_v1 = normalizer.normalize(extraction1, EXCHANGE_CODE)
+        schedule_v1 = normalizer.normalize(MOCK_EXTRACTION_RESULT, EXCHANGE_CODE)
 
-        # --- Run 2 (Customer penny taker increases $0.50 → $0.53) ---
+        # --- Run 2 (Customer penny taker increases $0.50 -> $0.53) ---
         modified_fees = [f.copy() for f in MOCK_EXTRACTION_RESULT.raw_fees]
         modified_fees[6] = {**modified_fees[6], "amount": 0.53}
 
-        mock_extract.return_value = ExtractionResult(
+        modified_extraction = ExtractionResult(
             raw_fees=modified_fees,
             exchange_name="Nasdaq ISE",
             effective_date="March 1, 2026",
             confidence=0.93,
         )
-        extraction2 = extractor.extract(doc1, EXCHANGE_CODE)
-        schedule_v2 = normalizer.normalize(extraction2, EXCHANGE_CODE)
+        schedule_v2 = normalizer.normalize(modified_extraction, EXCHANGE_CODE)
 
         report = detector.detect(
             old_schedule=schedule_v1,
