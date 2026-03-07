@@ -14,13 +14,6 @@ class Settings(BaseSettings):
     # Redis
     redis_url: str = "redis://localhost:6379/0"
 
-    # LLM (OpenRouter - OpenAI-compatible)
-    openrouter_api_key: str = ""
-    openrouter_base_url: str = "https://openrouter.ai/api/v1"
-
-    # Direct provider API keys (bypass OpenRouter when set)
-    dashscope_api_key: str = ""  # Alibaba Cloud DashScope for Qwen models
-
     # Email (Gmail SMTP)
     smtp_host: str = "smtp.gmail.com"
     smtp_port: int = 587
@@ -54,29 +47,15 @@ class Settings(BaseSettings):
     # PDF Parser
     pdf_parser_backend: str = "pymupdf"  # "pymupdf" or "docling"
 
-    # AI — default model (fallback for all tasks)
-    ai_model: str = "qwen/qwen3.5-flash"
-    ai_max_tokens: int = 32768
-    ai_confidence_threshold: float = 0.8
-    ai_max_retries: int = 3
-    ai_section_char_budget: int = 15000
+    # Claude Agent SDK model settings
+    claude_orchestrator_model: str = "haiku"
+    claude_extractor_model: str = "sonnet"
+    claude_validator_model: str = "haiku"
+    claude_discovery_model: str = "haiku"
 
-    # Per-task model routing (Qwen via DashScope direct, $0.10/M input, $0.40/M output)
-    ai_model_table_classification: str = "qwen/qwen3.5-flash"
-    ai_model_orchestrator: str = "qwen/qwen3.5-flash"
-    ai_model_fee_extraction: str = "qwen/qwen3.5-flash"
-    ai_model_fee_validation: str = "qwen/qwen3.5-flash"
-    ai_model_correction: str = "qwen/qwen3.5-flash"
-    ai_model_url_discovery: str = "qwen/qwen3.5-flash"
-    ai_model_change_summary: str = "qwen/qwen3.5-flash"
-    ai_model_doc_classification: str = "qwen/qwen3.5-flash"
+    # Document settings
     doc_auto_approve_threshold: float = 0.9
     discovery_include_protocol_specs: bool = True
-    ai_model_protocol_extraction: str = "qwen/qwen3.5-flash"
-
-    # Budget guardrails
-    ai_budget_per_exchange_usd: float = 1.00
-    ai_budget_daily_usd: float = 15.00
 
     # URL Discovery
     serpapi_api_key: str = ""
