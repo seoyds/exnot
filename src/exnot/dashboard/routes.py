@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
-import json
-from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 
@@ -15,9 +12,8 @@ from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from exnot.config import get_settings
-from exnot.db.engine import AsyncSessionLocal, get_db
+from exnot.db.engine import get_db
 from exnot.db.models import (
-    AgentRunStatus,
     ChangeType,
     DocumentStatus,
     FeeType,
@@ -30,8 +26,6 @@ from exnot.db.models import (
     User,
 )
 from exnot.db.repositories import (
-    AgentEventRepository,
-    AgentRunRepository,
     ExchangeDocumentRepository,
     ExchangeRepository,
     FeeChangeRepository,
@@ -688,240 +682,6 @@ async def logout(request: Request):
     response = RedirectResponse(url="/dashboard", status_code=303)
     response.delete_cookie("access_token")
     return response
-
-
-# ---------------------------------------------------------------------------
-# Monitor — real-time agent run monitoring
-# ---------------------------------------------------------------------------
-
-
-@router.get("/dashboard/monitor", response_class=HTMLResponse)
-async def monitor_page(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-):
-    """Main monitor page showing recent agent runs (admin-only)."""
-    user = await _get_current_user_from_cookie(request, db)
-    if not user or not user.is_admin:
-        return RedirectResponse(
-            url="/dashboard/login?error=Admin+login+required",
-            status_code=303,
-        )
-
-    run_repo = AgentRunRepository(db)
-    runs = await run_repo.get_recent(limit=50)
-
-    return templates.TemplateResponse(
-        "monitor.html",
-        {
-            "request": request,
-            "runs": runs,
-            "user": user,
-            "success": request.query_params.get("success"),
-            "error": request.query_params.get("error"),
-        },
-    )
-
-
-@router.get("/dashboard/monitor/stream")
-async def monitor_stream(
-    request: Request,
-    run_id: str | None = Query(default=None),
-    db: AsyncSession = Depends(get_db),
-):
-    """SSE endpoint for real-time agent run events."""
-    user = await _get_current_user_from_cookie(request, db)
-    if not user or not user.is_admin:
-        return HTMLResponse("Unauthorized", status_code=401)
-
-    from exnot.ai.event_emitter import CHANNEL_ALL, EventEmitter, _channel_for_run
-
-    async def event_generator():
-        r = EventEmitter.get_redis_client()
-        pubsub = r.pubsub()
-
-        try:
-            if run_id:
-                import uuid as _uuid
-
-                parsed_run_id = _uuid.UUID(run_id)
-
-                # Replay existing events from DB first
-                async with AsyncSessionLocal() as replay_db:
-                    event_repo = AgentEventRepository(replay_db)
-                    existing_events = await event_repo.get_for_run(parsed_run_id)
-                    for ev in existing_events:
-                        msg = {
-                            "run_id": str(parsed_run_id),
-                            "seq": ev.seq,
-                            "event_type": ev.event_type.value,
-                            "step_name": ev.step_name,
-                            "model": ev.model,
-                            "input_tokens": ev.input_tokens,
-                            "output_tokens": ev.output_tokens,
-                            "cost_usd": round(ev.cost_usd, 6) if ev.cost_usd else None,
-                            "latency_ms": ev.latency_ms,
-                            "created_at": ev.created_at.isoformat() if ev.created_at else None,
-                        }
-                        yield f"data: {json.dumps(msg)}\n\n"
-
-                # Subscribe to run-specific channel
-                pubsub.subscribe(_channel_for_run(parsed_run_id))
-            else:
-                # Subscribe to global channel
-                pubsub.subscribe(CHANNEL_ALL)
-
-            while True:
-                if await request.is_disconnected():
-                    break
-                message = pubsub.get_message(ignore_subscribe_messages=True, timeout=0.1)
-                if message and message["type"] == "message":
-                    data = message["data"]
-                    if isinstance(data, bytes):
-                        data = data.decode("utf-8")
-                    yield f"data: {data}\n\n"
-                else:
-                    yield ": keepalive\n\n"
-                await asyncio.sleep(0.5)
-        finally:
-            pubsub.unsubscribe()
-            pubsub.close()
-            r.close()
-
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
-    )
-
-
-@router.get("/dashboard/monitor/events/{run_id}", response_class=HTMLResponse)
-async def monitor_events(
-    run_id: str,
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-):
-    """HTML fragment with events for a specific run."""
-    user = await _get_current_user_from_cookie(request, db)
-    if not user or not user.is_admin:
-        return HTMLResponse("Unauthorized", status_code=401)
-
-    import uuid as _uuid
-
-    try:
-        parsed_id = _uuid.UUID(run_id)
-    except ValueError:
-        return HTMLResponse("Invalid run ID", status_code=400)
-
-    run_repo = AgentRunRepository(db)
-    run = await run_repo.get_by_id(parsed_id)
-    if not run:
-        return HTMLResponse("Run not found", status_code=404)
-
-    event_repo = AgentEventRepository(db)
-    events = await event_repo.get_for_run(parsed_id)
-
-    return templates.TemplateResponse(
-        "monitor_events.html",
-        {
-            "request": request,
-            "run": run,
-            "events": events,
-        },
-    )
-
-
-@router.post("/dashboard/monitor/{run_id}/stop")
-async def monitor_stop_run(
-    run_id: str,
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-):
-    """Stop a single running agent run (admin-only)."""
-    user = await _get_current_user_from_cookie(request, db)
-    if not user or not user.is_admin:
-        return RedirectResponse(
-            url="/dashboard/login?error=Admin+login+required",
-            status_code=303,
-        )
-
-    import uuid as _uuid
-
-    from exnot.ai.event_emitter import EventEmitter
-    from exnot.workers.celery_app import celery_app
-
-    try:
-        parsed_id = _uuid.UUID(run_id)
-    except ValueError:
-        return RedirectResponse(
-            url="/dashboard/monitor?error=Invalid+run+ID",
-            status_code=303,
-        )
-
-    run_repo = AgentRunRepository(db)
-    run = await run_repo.get_by_id(parsed_id)
-    if not run:
-        return RedirectResponse(
-            url="/dashboard/monitor?error=Run+not+found",
-            status_code=303,
-        )
-
-    # Set cancellation flag in Redis
-    EventEmitter.request_cancel(run.id)
-
-    # Revoke Celery task
-    if run.celery_task_id:
-        celery_app.control.revoke(run.celery_task_id, terminate=True, signal="SIGTERM")
-
-    # Update status in DB
-    run.status = AgentRunStatus.CANCELLED
-    run.completed_at = datetime.utcnow()
-    await db.commit()
-
-    return RedirectResponse(
-        url="/dashboard/monitor?success=Run+cancelled",
-        status_code=303,
-    )
-
-
-@router.post("/dashboard/monitor/stop-all")
-async def monitor_stop_all(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-):
-    """Stop all running agent runs (admin-only)."""
-    user = await _get_current_user_from_cookie(request, db)
-    if not user or not user.is_admin:
-        return RedirectResponse(
-            url="/dashboard/login?error=Admin+login+required",
-            status_code=303,
-        )
-
-    from exnot.ai.event_emitter import EventEmitter
-    from exnot.workers.celery_app import celery_app
-
-    run_repo = AgentRunRepository(db)
-    active_runs = await run_repo.get_active()
-
-    cancelled_count = 0
-    for run in active_runs:
-        EventEmitter.request_cancel(run.id)
-        if run.celery_task_id:
-            celery_app.control.revoke(run.celery_task_id, terminate=True, signal="SIGTERM")
-        run.status = AgentRunStatus.CANCELLED
-        run.completed_at = datetime.utcnow()
-        cancelled_count += 1
-
-    await db.commit()
-
-    return RedirectResponse(
-        url=f"/dashboard/monitor?success=Cancelled+{cancelled_count}+run(s)",
-        status_code=303,
-    )
 
 
 # ---------------------------------------------------------------------------

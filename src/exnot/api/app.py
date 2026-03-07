@@ -54,6 +54,14 @@ try:
 except ImportError:
     pass
 
+# --- SSE streaming routes ---
+try:
+    from exnot.agents.streaming import router as streaming_router
+
+    app.include_router(streaming_router)
+except ImportError:
+    pass
+
 # --- Static files ---
 static_dir = Path(__file__).parent.parent / "dashboard" / "static"
 if static_dir.exists():

@@ -179,18 +179,20 @@ async def run_exchange_pipeline(exchange_code: str, force: bool = False) -> list
 
 
 async def _broadcast_message(exchange_code: str, message: object) -> None:
-    """Broadcast a pipeline message to connected dashboard clients.
-
-    This is a hook point for SSE streaming integration. The actual
-    implementation will be wired up when the dashboard SSE endpoint
-    is created (Task 14-15).
+    """Broadcast a pipeline message to connected dashboard clients via SSE.
 
     Args:
         exchange_code: Exchange being processed.
         message: Message from the agent conversation.
     """
-    # Placeholder — will be replaced by SSE broadcaster in dashboard integration
-    pass
+    try:
+        from exnot.agents.streaming import broadcast_to_dashboard
+
+        await broadcast_to_dashboard(exchange_code, message)
+    except ImportError:
+        pass
+    except Exception:
+        logger.debug("Failed to broadcast message for %s", exchange_code, exc_info=True)
 
 
 def run_exchange_pipeline_sync(exchange_code: str, force: bool = False) -> list:
