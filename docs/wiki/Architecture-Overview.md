@@ -23,13 +23,12 @@ graph TB
         Flower[Flower<br/>:5555]
     end
 
-    subgraph "AI Layer"
-        AIExtractor[AI Extractor]
-        Orchestrator[Orchestrator Agent]
-        SectionExtractor[Section Extractor]
-        Validator[Fee Validator]
-        Correction[Correction Agent]
-        TableClassifier[Table Classifier]
+    subgraph "AI Layer (Claude Agent SDK)"
+        Orchestrator[Orchestrator Agent<br/>agents/pipeline.py]
+        MCPTools[MCP Tools Server<br/>11 tools]
+        Extractor[Extractor Subagent]
+        Validator[Validator Subagent]
+        DiscoveryAgent[Discovery Subagent]
     end
 
     subgraph "Data Layer"
@@ -39,7 +38,7 @@ graph TB
     end
 
     subgraph "External Services"
-        OpenRouter[OpenRouter / DashScope<br/>LLM API]
+        Claude[Claude AI<br/>via Agent SDK]
         Exchanges[18+ Exchange<br/>Websites]
         SerpAPI[SerpAPI<br/>URL Discovery]
         SMTP[SMTP Server<br/>Gmail]
@@ -58,17 +57,13 @@ graph TB
     Worker --> MinIO
     Beat --> Redis
 
-    Worker --> AIExtractor
-    AIExtractor --> Orchestrator
-    AIExtractor --> SectionExtractor
-    AIExtractor --> Validator
-    AIExtractor --> Correction
-    AIExtractor --> TableClassifier
+    Worker --> Orchestrator
+    Orchestrator --> MCPTools
+    Orchestrator --> Extractor
+    Orchestrator --> Validator
+    Orchestrator --> DiscoveryAgent
 
-    SectionExtractor --> OpenRouter
-    Validator --> OpenRouter
-    Correction --> OpenRouter
-    TableClassifier --> OpenRouter
+    Orchestrator --> Claude
 
     Worker --> Exchanges
     Worker --> SerpAPI
@@ -116,19 +111,18 @@ graph LR
 ```
 src/exnot/
 ├── config.py              # Central configuration (pydantic-settings)
-├── ai/                    # AI foundation: agents, models, cost tracking
-│   ├── models.py          # LiteLLM model registry + TaskType routing
-│   ├── cost.py            # Per-run cost tracking
-│   ├── deps.py            # Shared PydanticAI dependencies
-│   ├── types.py           # Pydantic output models for all agents
-│   ├── prompts/           # Per-exchange extraction prompts (19 files)
-│   └── agents/            # PydanticAI agent definitions (7 agents)
+├── agents/                # Claude Agent SDK pipeline layer
+│   ├── pipeline.py        # Orchestrator pipeline (entry point, run_exchange_pipeline)
+│   ├── streaming.py       # SSE streaming via Redis pub/sub (worker→web bridge)
+│   ├── tools/             # MCP tool definitions (11 tools + server.py)
+│   ├── subagents/         # AgentDefinition configs (extractor, validator, discovery)
+│   └── prompts/           # 18 exchange-specific prompt files + registry.py
 ├── api/                   # FastAPI routes + schemas
 ├── dashboard/             # Jinja2 templates + static assets
 ├── db/                    # SQLAlchemy models + repository layer
 ├── discovery/             # Fee schedule URL discovery (SerpAPI)
 ├── exchanges/             # Exchange registry + YAML definitions
-├── parser/                # PDF/HTML/CSV parsing + AI extraction
+├── parser/                # PDF/HTML/CSV parsing + table classification
 ├── profiles/              # Zero-cost re-extraction profiles
 ├── normalizer/            # Canonical fee schema + mapping engine
 ├── differ/                # Change detection + comparison + reporting
@@ -165,7 +159,7 @@ graph TB
         DB[Database / Repository]
         Storage[MinIO Storage]
         Cache[Redis Cache/Broker]
-        LLM[LLM Provider]
+        LLM[Claude AI via SDK]
         Email[SMTP]
     end
 
@@ -201,11 +195,15 @@ All database access goes through `db/repositories.py`. Route handlers and pipeli
 
 ### Per-Exchange Configuration
 
-Each exchange is defined in a YAML file (`exchanges/definitions/`) specifying its URL, document format, scraper type, and parser hints. Exchange-specific AI prompts live in `ai/prompts/`. This separation means adding a new exchange requires only a YAML file and an optional prompt — no code changes.
+Each exchange is defined in a YAML file (`exchanges/definitions/`) specifying its URL, document format, scraper type, and parser hints. Exchange-specific AI prompts live in `agents/prompts/`. This separation means adding a new exchange requires only a YAML file and an optional prompt — no code changes.
 
 ### Budget-Aware AI
 
-Every AI call is cost-tracked via `CostTracker`. Per-exchange and daily budgets prevent runaway costs. The correction agent is entirely skipped when over budget.
+Pipeline costs are tracked via `ResultMessage` from the Claude Agent SDK, which reports `total_cost_usd`, `total_tokens`, and `num_turns`. Per-exchange and daily budget guardrails (`AI_BUDGET_PER_EXCHANGE_USD`, `AI_BUDGET_DAILY_USD`) prevent runaway costs.
+
+### Real-Time Event Streaming
+
+Pipeline events are streamed from the Celery worker to the web dashboard via Redis pub/sub. Events are also persisted to Redis lists (24h TTL) for replay. The monitor page shows live progress for running pipelines and expandable logs for completed runs.
 
 ## Related Pages
 

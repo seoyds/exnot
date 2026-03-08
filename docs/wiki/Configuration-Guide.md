@@ -21,32 +21,21 @@ All configuration is managed via `pydantic-settings` in `src/exnot/config.py`. S
 |----------|---------|-------------|
 | `REDIS_URL` | `redis://localhost:6379/0` | Redis connection (broker + result backend + pub/sub) |
 
-### AI / LLM
+### AI / Claude Agent SDK
+
+The pipeline uses the Claude Agent SDK, which bundles the Claude Code CLI as a subprocess. Authentication is handled via the Claude SDK auth file (`~/.claude/.claude.json`).
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `OPENROUTER_API_KEY` | — | OpenRouter API key (required) |
-| `OPENROUTER_BASE_URL` | `https://openrouter.ai/api/v1` | OpenRouter base URL |
-| `DASHSCOPE_API_KEY` | — | DashScope API key (optional, for direct Qwen routing) |
-| `AI_MODEL` | `deepseek/deepseek-v3.2-20251201` | Default/fallback model |
+| `CLAUDE_ORCHESTRATOR_MODEL` | `claude-sonnet-4-20250514` | Model for the orchestrator agent |
+| `CLAUDE_EXTRACTOR_MODEL` | `claude-sonnet-4-20250514` | Model for the extractor subagent |
+| `CLAUDE_VALIDATOR_MODEL` | `claude-sonnet-4-20250514` | Model for the validator subagent |
+| `CLAUDE_DISCOVERY_MODEL` | `claude-sonnet-4-20250514` | Model for the discovery subagent |
 
-### Per-Task Model Routing
-
-Each AI task can use a different model for cost/quality optimization:
-
-| Variable | Default | Task |
-|----------|---------|------|
-| `AI_MODEL_TABLE_CLASSIFICATION` | `qwen/qwen3.5-flash-02-23` | Table type classification |
-| `AI_MODEL_ORCHESTRATOR` | `qwen/qwen3.5-flash-02-23` | Extraction orchestrator |
-| `AI_MODEL_FEE_EXTRACTION` | `deepseek/deepseek-v3.2-20251201` | Core fee extraction |
-| `AI_MODEL_FEE_VALIDATION` | `mistralai/mistral-small-3.1-24b-instruct` | Extraction validation |
-| `AI_MODEL_CORRECTION` | `deepseek/deepseek-v3.2-20251201` | Targeted correction |
-| `AI_MODEL_URL_DISCOVERY` | `qwen/qwen3.5-flash-02-23` | Fee schedule URL discovery |
-| `AI_MODEL_CHANGE_SUMMARY` | `qwen/qwen3.5-flash-02-23` | Change summary generation |
-
-**Provider routing**:
-- Models starting with `qwen/` → DashScope (if `DASHSCOPE_API_KEY` set) → OpenRouter (fallback)
-- All other models → OpenRouter
+**Docker requirements**:
+- Both `web` and `worker` containers need `~/.claude:/root/.claude:ro` volume mount
+- Worker needs Node.js (SDK bundles Claude Code CLI as subprocess)
+- `/root/.claude.json` must exist — restore from backup if missing
 
 ### Budget Guardrails
 
@@ -106,47 +95,27 @@ Each AI task can use a different model for cost/quality optimization:
 | `APP_URL` | `http://localhost:8000` | Base URL for links in emails |
 | `CLOUDFLARE_TUNNEL_TOKEN` | — | Cloudflare tunnel token for production |
 
-## Model Cost Tiers
+## Claude Agent SDK Architecture
 
 ```mermaid
 graph LR
-    subgraph "CHEAP ($)"
-        TC[Table Classification]
-        OR[Orchestrator]
-        UD[URL Discovery]
-        CS[Change Summary]
+    subgraph "Orchestrator"
+        O[Orchestrator Agent]
     end
 
-    subgraph "MEDIUM ($$)"
-        FV[Fee Validation]
+    subgraph "Subagents"
+        E[Extractor]
+        V[Validator]
+        D[Discovery]
     end
 
-    subgraph "EXPENSIVE ($$$)"
-        FE[Fee Extraction]
-        CO[Correction]
-    end
-
-    TC --> Q[qwen3.5-flash]
-    OR --> Q
-    UD --> Q
-    CS --> Q
-    FV --> M[mistral-small]
-    FE --> D[deepseek-v3.2]
-    CO --> D
+    O --> Claude[Claude AI]
+    E --> Claude
+    V --> Claude
+    D --> Claude
 ```
 
-### Tuning Models
-
-To use a different model for fee extraction:
-```bash
-AI_MODEL_FEE_EXTRACTION=anthropic/claude-3.5-sonnet
-```
-
-To use the same model for everything:
-```bash
-AI_MODEL=anthropic/claude-3.5-sonnet
-# Individual overrides take precedence over AI_MODEL
-```
+All agents use Claude models via the Agent SDK. Models are configurable per-agent via environment variables (`CLAUDE_ORCHESTRATOR_MODEL`, `CLAUDE_EXTRACTOR_MODEL`, etc.).
 
 ### Tuning Budgets
 
@@ -155,10 +124,7 @@ For high-value exchanges that need more extraction budget:
 AI_BUDGET_PER_EXCHANGE_USD=5.00
 ```
 
-For reducing section sizes (more AI calls, but each sees less text):
-```bash
-AI_SECTION_CHAR_BUDGET=10000
-```
+Cost tracking is automatic via `ResultMessage.total_cost_usd` from the SDK.
 
 ## Example `.env` File
 
@@ -170,9 +136,9 @@ DATABASE_URL_SYNC=postgresql+psycopg2://exnot:password@localhost:5432/exnot
 # Redis
 REDIS_URL=redis://localhost:6379/0
 
-# AI
-OPENROUTER_API_KEY=sk-or-v1-xxxxx
-DASHSCOPE_API_KEY=sk-xxxxx  # Optional: direct Qwen routing
+# AI (Claude Agent SDK)
+# Auth via ~/.claude/.claude.json (mounted in Docker)
+# No API key env var needed — SDK uses Claude Code CLI auth
 
 # Auth
 SECRET_KEY=your-secret-key-here
@@ -199,6 +165,6 @@ APP_URL=http://localhost:8000
 
 ## Related Pages
 
-- [AI Agent System](AI-Agent-System.md) — model routing details
+- [AI Agent System](AI-Agent-System.md) — Claude Agent SDK architecture
 - [Worker Architecture](Worker-Architecture.md) — Celery configuration
 - [Development Guide](Development-Guide.md) — local setup instructions

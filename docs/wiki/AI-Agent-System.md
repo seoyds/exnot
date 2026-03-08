@@ -4,224 +4,206 @@
 
 ## Overview
 
-ExNot uses PydanticAI agents backed by LiteLLM for intelligent fee schedule extraction. The system routes different tasks to different models based on cost/quality trade-offs, tracks costs per pipeline run, and uses per-exchange prompts for maximum extraction accuracy.
+ExNot uses the **Claude Agent SDK** (`claude-agent-sdk`) for intelligent fee schedule extraction. The SDK runs an orchestrator agent that coordinates MCP tools and subagents via a Claude Code CLI subprocess. Per-exchange prompts ensure maximum extraction accuracy.
 
-## Agent Graph
+## Architecture
 
 ```mermaid
 graph TB
-    subgraph "Orchestrator Layer"
-        Orch[Orchestrator Agent<br/>CHEAP tier]
+    subgraph "Orchestrator (agents/pipeline.py)"
+        Orch[Orchestrator Agent<br/>System prompt + execution rules]
     end
 
-    subgraph "Extraction Layer"
-        SE[Section Extractor<br/>EXPENSIVE tier]
-        TC[Table Classifier<br/>CHEAP tier<br/>Hybrid: rules + AI]
+    subgraph "MCP Tools (agents/tools/)"
+        T1[load_exchange]
+        T2[load_exchange_prompt]
+        T3[scrape_document]
+        T4[check_document_changed]
+        T5[parse_document]
+        T6[try_profile_extract]
+        T7[save_profile]
+        T8[normalize_fees]
+        T9[detect_changes]
+        T10[save_snapshot]
+        T11[save_scraped_document]
+        T12[send_notifications]
+        T13[search_fee_urls]
     end
 
-    subgraph "Validation Layer"
-        FV[Fee Validator<br/>MEDIUM tier]
-        CA[Correction Agent<br/>EXPENSIVE tier<br/>Budget-gated]
+    subgraph "Subagents (agents/subagents/)"
+        SE[Extractor<br/>Per-exchange prompts]
+        FV[Validator<br/>Completeness checks]
+        DA[Discovery<br/>URL evaluation]
     end
 
-    subgraph "Supporting Agents"
-        DA[Discovery Agent<br/>CHEAP tier]
-        SA[Summarizer Agent<br/>CHEAP tier]
-    end
+    Orch -->|MCP tool calls| T1
+    Orch -->|MCP tool calls| T3
+    Orch -->|MCP tool calls| T5
+    Orch -->|MCP tool calls| T8
+    Orch -->|MCP tool calls| T9
+    Orch -->|Task delegation| SE
+    Orch -->|Task delegation| FV
+    Orch -->|Task delegation| DA
 
-    Orch -->|classify_tables| TC
-    Orch -->|extract_section| SE
-    Orch -->|validate_extraction| FV
-    Orch -->|correct_extraction| CA
-
-    style SE fill:#E91E63,color:white
-    style CA fill:#E91E63,color:white
-    style FV fill:#FF9800,color:white
     style Orch fill:#4CAF50,color:white
-    style TC fill:#4CAF50,color:white
+    style SE fill:#E91E63,color:white
+    style FV fill:#FF9800,color:white
     style DA fill:#4CAF50,color:white
-    style SA fill:#4CAF50,color:white
 ```
 
-> **Note**: In the current implementation, `AIExtractor` bypasses the orchestrator and directly iterates over section groups, calling the section extractor and validator agents. The orchestrator is defined as a fallback/alternative path.
+## Orchestrator Agent
 
-## Model Routing
+The orchestrator (`agents/pipeline.py`) is the entry point. It receives a system prompt with execution rules and coordinates the full pipeline via MCP tool calls and subagent delegation.
 
-Each agent task maps to a configurable model, enabling independent cost/quality tuning:
-
-```mermaid
-graph LR
-    subgraph "Task Types"
-        T1[TABLE_CLASSIFICATION]
-        T2[ORCHESTRATOR]
-        T3[FEE_EXTRACTION]
-        T4[FEE_VALIDATION]
-        T5[CORRECTION]
-        T6[URL_DISCOVERY]
-        T7[CHANGE_SUMMARY]
-    end
-
-    subgraph "Model Registry"
-        MR[ModelRegistry<br/>resolve task → model]
-    end
-
-    subgraph "Providers"
-        DS[DashScope<br/>Qwen models]
-        OR[OpenRouter<br/>All other models]
-    end
-
-    T1 --> MR
-    T2 --> MR
-    T3 --> MR
-    T4 --> MR
-    T5 --> MR
-    T6 --> MR
-    T7 --> MR
-
-    MR --> DS
-    MR --> OR
+**Key configuration** (`ClaudeAgentOptions`):
+```python
+options = ClaudeAgentOptions(
+    system_prompt=ORCHESTRATOR_SYSTEM_PROMPT,
+    allowed_tools=["mcp__exnot__*", "Task"],
+    mcp_servers={"exnot": tools_server},
+    agents={"extractor": extractor, "validator": validator, "discovery": discovery},
+    permission_mode="default",
+    can_use_tool=_auto_approve_tool,
+    model=settings.claude_orchestrator_model,
+)
 ```
 
-**Default model assignments**:
+**Headless execution**: Uses `can_use_tool` callback that auto-approves all tool calls (required for Docker/root where `bypassPermissions` is blocked).
 
-| Task | Env Var | Default Model | Cost Tier |
-|------|---------|---------------|-----------|
-| Table Classification | `AI_MODEL_TABLE_CLASSIFICATION` | `qwen/qwen3.5-flash-02-23` | CHEAP |
-| Orchestrator | `AI_MODEL_ORCHESTRATOR` | `qwen/qwen3.5-flash-02-23` | CHEAP |
-| Fee Extraction | `AI_MODEL_FEE_EXTRACTION` | `deepseek/deepseek-v3.2-20251201` | EXPENSIVE |
-| Fee Validation | `AI_MODEL_FEE_VALIDATION` | `mistralai/mistral-small-3.1-24b-instruct` | MEDIUM |
-| Correction | `AI_MODEL_CORRECTION` | `deepseek/deepseek-v3.2-20251201` | EXPENSIVE |
-| URL Discovery | `AI_MODEL_URL_DISCOVERY` | `qwen/qwen3.5-flash-02-23` | CHEAP |
-| Change Summary | `AI_MODEL_CHANGE_SUMMARY` | `qwen/qwen3.5-flash-02-23` | CHEAP |
+**Streaming prompt**: The `can_use_tool` callback requires the prompt to be an `AsyncIterable[dict]`, not a plain string.
 
-**Provider routing logic**:
-- If `DASHSCOPE_API_KEY` is set and the model starts with `qwen/`, route directly to DashScope (bypasses OpenRouter markup)
-- All other models route through OpenRouter via `OPENROUTER_API_KEY`
-- DashScope calls include `extra_body={"enable_thinking": False}` for tool_choice compatibility
+**CLAUDECODE env var**: Must `os.environ.pop("CLAUDECODE", None)` before SDK calls to prevent nested session errors.
 
-## Agent Details
+## MCP Tools
 
-### Section Extractor (`ai/agents/section_extractor.py`)
+All pipeline operations are exposed as MCP tools via `create_sdk_mcp_server()` in `agents/tools/server.py`:
 
-The core extraction agent. Receives a document section with tables and returns structured `SectionExtractionResult` containing a list of `ExtractedFee` objects.
+| Tool | File | Purpose |
+|------|------|---------|
+| `load_exchange` | `exchange.py` | Load exchange config (name, URLs, metadata) |
+| `load_exchange_prompt` | `exchange.py` | Load exchange-specific extraction prompt |
+| `search_fee_urls` | `discovery.py` | Search web for fee schedule URLs (SerpAPI) |
+| `scrape_document` | `scraping.py` | Download document from URL (HTTP or browser) |
+| `check_document_changed` | `scraping.py` | Hash-based change detection vs latest snapshot |
+| `parse_document` | `parsing.py` | Parse PDF/HTML/CSV into structured text + tables |
+| `try_profile_extract` | `profiles.py` | Zero-cost extraction using saved profile |
+| `save_profile` | `profiles.py` | Save extraction profile for future runs |
+| `normalize_fees` | `normalization.py` | Map extracted fees to canonical schema |
+| `detect_changes` | `diffing.py` | Compare fees against previous snapshot |
+| `save_snapshot` | `persistence.py` | Save snapshot + normalized fees to DB |
+| `save_scraped_document` | `persistence.py` | Persist raw document to MinIO |
+| `send_notifications` | `notifications.py` | Email subscribers about fee changes |
 
-**Output validator** auto-corrects sign/rebate consistency:
+Tools are decorated with `@tool()` from `claude_agent_sdk` and return MCP-format responses:
+```python
+@tool("scrape_document", "Download a document from a URL...", {"url": str, "method": str, "exchange_code": str})
+async def scrape_document(args):
+    # ... returns {"content": [{"type": "text", "text": json.dumps({...})}]}
 ```
-If fee_value < 0 → set is_rebate = True
-If is_rebate = True and fee_value > 0 → negate fee_value
-```
+
+## Subagents
+
+Subagents are defined as `AgentDefinition` objects and invoked by the orchestrator via the `Task` tool.
+
+### Extractor (`agents/subagents/extractor.py`)
+
+The core extraction agent. Receives document text/sections and returns structured JSON fee data.
 
 **Prompt composition**:
 ```
-BASE_PROMPT (V3 schema definition, all field enums)
-+ Exchange-specific prompt (terminology, table layout, special rules)
-+ Section text + formatted tables
-+ Context sections (tier definitions, footnotes)
+BASE_EXTRACTION_PROMPT (output format, field enums, critical rules)
++ Exchange-specific prompt (from agents/prompts/ registry)
 ```
 
-### Fee Validator (`ai/agents/fee_validator.py`)
+**Output**: JSON array of fee objects with fields: `participant_type`, `security_class`, `order_type`, `fee_type`, `amount_cents`, `is_rebate`, `origin_code`, `confidence`, etc.
 
-Validates extraction completeness. Returns `ValidationResult` with confidence score (0.0–1.0) and issue list.
+**Participant type mapping**:
+- Customer / Priority Customer / Public Customer → `CUSTOMER`
+- Professional / Professional Customer → `PROFESSIONAL`
+- Firm / Firm Proprietary → `FIRM`
+- Broker-Dealer / Non-Member BD / JBO → `BROKER_DEALER`
+- Market Maker / LMM / RMM / Specialist → `MARKET_MAKER`
+- Away Market Maker / Non-Exchange MM → `AWAY_MARKET_MAKER`
+
+### Validator (`agents/subagents/validator.py`)
+
+Validates extraction completeness and correctness. Returns JSON with `is_valid`, `confidence` (0.0–1.0), `issues`, and `suggested_corrections`.
 
 **Checks performed**:
-- CUSTOMER/Priority Customer fees present
-- Both MAKER and TAKER fees present
-- Amounts within sanity bounds (< $3/contract)
-- Tier group completeness
-- Coverage across expected participant types
+1. Participant coverage (CUSTOMER, PROFESSIONAL, MARKET_MAKER, FIRM present)
+2. Fee type coverage (MAKER and TAKER fees present)
+3. Amount reasonableness (within -$1.50 to $1.50 per contract range)
+4. Sign/rebate consistency (negative amounts → is_rebate=true)
+5. Tier completeness (sequential tier_level values)
+6. Duplicate detection
 
-**Output**: `ValidationResult { confidence: float, issues: list[{description, severity}] }`
+### Discovery (`agents/subagents/discovery.py`)
 
-### Table Classifier (`ai/agents/table_classifier.py`)
+Evaluates search results to identify the best fee schedule URL. Returns JSON with `primary_url`, `alternate_urls`, `confidence`, and `reasoning`.
 
-Hybrid classification — rules first, AI only for ambiguous cases:
+**Evaluation criteria**: Official exchange domains preferred, direct PDF/HTML links over landing pages, current/undated URLs over archived versions.
 
-```mermaid
-graph TD
-    A[Table] --> B[Rule-Based Scoring]
-    B --> C{Score > threshold?}
-    C -->|Yes, clearly fee table| D[FEE_TABLE]
-    C -->|Yes, clearly not| E[NON_FEE / REFERENCE]
-    C -->|Ambiguous| F[AI Classification<br/>CHEAP model]
-    F --> G[Classification Result]
-    D --> G
-    E --> G
-```
+## Execution Rules
 
-**Rule-based signals**: Header keywords ("fee", "rebate", "per contract"), numeric density, column patterns, section context.
+The orchestrator follows these rules (defined in the system prompt):
 
-### Correction Agent (`ai/agents/correction.py`)
-
-Targeted correction for validation issues. **Budget-gated** — only runs if `cost_tracker.budget_remaining > 0`.
-
-Receives the current fees + specific issues from the validator, returns `CorrectionResult` with corrected fees and indices of removed entries.
-
-### Discovery Agent (`ai/agents/discovery.py`)
-
-Evaluates candidate URLs found via SerpAPI to identify the best fee schedule URL for an exchange.
-
-Returns `UrlEvaluationResult { primary_url, alternate_urls, confidence, reasoning }`.
-
-### Summarizer Agent (`ai/agents/summarizer.py`)
-
-Generates human-readable change summaries from `FeeChange` records for email notifications.
+1. **Always load exchange config first** via `load_exchange`
+2. **Use discovery subagent only if no configured URLs** — call `search_fee_urls` then delegate to discovery subagent
+3. **Check if document changed** via `check_document_changed` — skip if unchanged (unless force mode)
+4. **Try profile-based extraction first** via `try_profile_extract` — zero AI cost if profile matches
+5. **For AI extraction**, load exchange prompt then delegate to extractor subagent
+6. **Process section groups sequentially**, accumulate all extracted fees
+7. **Validate with validator subagent** — if confidence < 0.8, retry extraction once with corrections
+8. **Always save results** via `save_snapshot` and `save_profile`
+9. **Send notifications only if changes detected** — `detect_changes` then `send_notifications`
 
 ## Cost Tracking
 
+Pipeline costs are tracked via `ResultMessage` from the Claude Agent SDK:
+
 ```mermaid
 graph TD
-    A[AI Call] --> B[LiteLLM completion_cost]
-    B --> C[CostTracker]
-    C --> D{Budget Check}
-    D -->|Under budget| E[Continue]
-    D -->|Over per-exchange<br/>budget| F[Skip remaining groups]
-    D -->|Over daily budget| G[Abort pipeline]
-
-    C --> H[AgentEvent Records]
-    C --> I[Snapshot JSONB<br/>ai_extraction field]
+    A[Pipeline Run] --> B[Claude Agent SDK<br/>query]
+    B --> C[ResultMessage]
+    C --> D[total_cost_usd]
+    C --> E[total_tokens]
+    C --> F[num_turns]
+    D --> G[ScrapeLog Record]
+    E --> G
+    F --> G
 ```
 
-**`CostTracker`** (`ai/cost.py`):
-- Accumulates per-call costs using LiteLLM's `completion_cost()` function
-- Tracks: `total_cost_usd`, individual `calls` list, `budget_usd`
-- Properties: `budget_remaining`, `is_over_budget`
-- The `summary()` dict is stored in `snapshot.ai_extraction` JSONB for audit
-
-**Budget defaults**:
+**Budget guardrails** (enforced in pipeline configuration):
 - Per-exchange: `$2.00` (`AI_BUDGET_PER_EXCHANGE_USD`)
 - Daily total: `$15.00` (`AI_BUDGET_DAILY_USD`)
 
+Cost data is stored in the `ScrapeLog` record for each pipeline run.
+
 ## Audit Trail
 
-Every AI pipeline run is fully audited via two tables:
+Pipeline execution is tracked via `ScrapeLog` records with status lifecycle:
 
-### AgentRun
-One record per pipeline execution. Fields: exchange_code, status, model used, total tokens, total cost, start/end timestamps.
+```mermaid
+stateDiagram-v2
+    [*] --> RUNNING: Task starts, ScrapeLog created
+    RUNNING --> SUCCESS: Pipeline completes successfully
+    RUNNING --> NO_CHANGE: Document hash unchanged
+    RUNNING --> FAILED: Pipeline error or manual kill
+```
 
-### AgentEvent
-Ordered sequence of events within a run:
+**ScrapeLog fields**: `status`, `celery_task_id`, `total_cost_usd`, `total_tokens`, `num_turns`, `error_message`, `duration_seconds`.
 
-| Event Type | Description |
-|-----------|-------------|
-| `PIPELINE_START` | Pipeline initiated |
-| `PIPELINE_STEP` | Major step (e.g., "extracting group 2/5") |
-| `AI_CALL_START` | LLM call initiated (prompt text stored) |
-| `AI_CALL_COMPLETE` | LLM call finished (response, tokens, cost, latency) |
-| `AI_CALL_RETRY` | PydanticAI ModelRetry triggered |
-| `BUDGET_WARNING` | Approaching or exceeded budget |
-| `PIPELINE_COMPLETE` | Pipeline finished |
-| `PIPELINE_ERROR` | Pipeline failed with error |
-
-Events are:
-1. Saved to PostgreSQL for historical queries
-2. Published to Redis pub/sub for real-time SSE streaming to the dashboard monitor
+**Real-time events** are streamed via Redis pub/sub:
+- Channel: `exnot:pipeline:events:{exchange_code}`
+- Persistence: Redis lists at `exnot:pipeline:log:{scrape_log_id}` (24h TTL)
+- Events broadcast to dashboard via SSE for live monitoring
 
 ## Per-Exchange Prompts
 
-Located in `ai/prompts/`, one file per exchange plus `base.py`.
+Located in `agents/prompts/`, one file per exchange plus `base.py`.
 
 **`BASE_PROMPT`** defines:
-- V3 output schema (all field names, allowed enum values)
+- Output schema (all field names, allowed enum values)
 - Rebate sign conventions
 - General extraction rules
 
@@ -234,22 +216,33 @@ Located in `ai/prompts/`, one file per exchange plus `base.py`.
 
 ```python
 # Example: getting the full prompt for CBOE BZX
-from exnot.ai.prompts.registry import get_extraction_prompt
+from exnot.agents.prompts.registry import get_extraction_prompt
 prompt = get_extraction_prompt("CBOE_BZX")
 # Returns: BASE_PROMPT + CBOE_BZX-specific prompt
 ```
 
 For exchanges without a dedicated prompt, only `BASE_PROMPT` is used.
 
-## Shared Dependencies
+**18 exchange prompts** are registered in `agents/prompts/registry.py`:
+CBOE (BZX, C1, C2, EDGX) · NASDAQ (BX, GEMX, ISE, MRX, NOM, PHLX) · MIAX (Emerald, Options, Pearl, Sapphire) · NYSE (American, Arca) · BOX Options · MEMX Options
 
-Three dependency dataclasses injected into agents via `RunContext[Deps]`:
+## Hybrid Table Classification
 
-| Deps Class | Used By | Key Fields |
-|-----------|---------|------------|
-| `ExtractionDeps` | Extractor, Validator, Correction, Classifier | `model_registry`, `cost_tracker`, `exchange_code`, `exchange_prompt`, `document`, `sections`, `extracted_fees` (accumulator) |
-| `DiscoveryDeps` | Discovery Agent | `model_registry`, `cost_tracker`, `exchange_code`, `exchange_name`, `operator` |
-| `SummaryDeps` | Summarizer Agent | `model_registry`, `cost_tracker`, `exchange_code` |
+Tables are classified using a rules-first approach to minimize AI costs:
+
+```mermaid
+graph TD
+    A[Table] --> B[Rule-Based Scoring]
+    B --> C{Score > threshold?}
+    C -->|Yes, clearly fee table| D[FEE_TABLE]
+    C -->|Yes, clearly not| E[NON_FEE / REFERENCE]
+    C -->|Ambiguous| F[AI Classification]
+    F --> G[Classification Result]
+    D --> G
+    E --> G
+```
+
+**Rule-based signals**: Header keywords ("fee", "rebate", "per contract"), numeric density, column patterns, section context.
 
 ## Related Pages
 

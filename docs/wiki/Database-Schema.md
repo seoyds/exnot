@@ -11,15 +11,11 @@ erDiagram
     Exchange ||--o{ ScrapeLog : "has many"
     Exchange ||--o{ DiscoveryLog : "has many"
     Exchange ||--o| ExchangeProfile : "has one"
-    Exchange ||--o{ AgentRun : "has many"
-
     FeeScheduleSnapshot ||--o{ NormalizedFee : "contains"
     FeeScheduleSnapshot ||--o{ ScrapedDocument : "has many"
     FeeScheduleSnapshot ||--o{ FeeTier : "has many"
 
     NormalizedFee }o--o| FeeTier : "optional"
-
-    AgentRun ||--o{ AgentEvent : "has many"
 
     Subscriber ||--o{ NotificationLog : "receives"
 
@@ -127,9 +123,14 @@ erDiagram
         uuid id PK
         uuid exchange_id FK
         string status
+        string celery_task_id
+        float total_cost_usd
+        int total_tokens
+        int num_turns
         string error_message
         float duration_seconds
         datetime started_at
+        datetime completed_at
     }
 
     DiscoveryLog {
@@ -152,28 +153,6 @@ erDiagram
         float match_ratio
         datetime created_at
         datetime updated_at
-    }
-
-    AgentRun {
-        uuid id PK
-        uuid exchange_id FK
-        string status
-        string model_used
-        int total_input_tokens
-        int total_output_tokens
-        float total_cost_usd
-        datetime started_at
-        datetime completed_at
-    }
-
-    AgentEvent {
-        uuid id PK
-        uuid run_id FK
-        int seq
-        string event_type
-        string step_name
-        json data
-        datetime created_at
     }
 
     Subscriber {
@@ -255,11 +234,21 @@ Records detected differences between consecutive snapshots. Used for notificatio
 
 **`change_type`**: `NEW`, `MODIFIED`, `REMOVED`
 
-### AgentRun + AgentEvent
+### ScrapeLog
 
-Full audit trail. `AgentEvent.event_type` values: `PIPELINE_START`, `PIPELINE_STEP`, `AI_CALL_START`, `AI_CALL_COMPLETE`, `AI_CALL_RETRY`, `BUDGET_WARNING`, `PIPELINE_COMPLETE`, `PIPELINE_ERROR`.
+Tracks pipeline execution lifecycle. Status enum: `RUNNING`, `SUCCESS`, `FAILED`, `NO_CHANGE`.
 
-Events are ordered by `seq` within a run.
+**Key fields**:
+- `celery_task_id` — Celery task ID for kill support (admin can revoke via monitor UI)
+- `total_cost_usd` — Total Claude AI cost from `ResultMessage`
+- `total_tokens` — Total tokens consumed
+- `num_turns` — Number of agent turns in the pipeline
+- `error_message` — Error details if failed (enriched with SDK stderr output)
+
+**Real-time events** are NOT stored in PostgreSQL. Instead, they are:
+1. Published to Redis pub/sub channels (`exnot:pipeline:events:{exchange_code}`)
+2. Persisted to Redis lists (`exnot:pipeline:log:{scrape_log_id}`) with 24h TTL
+3. Streamed to dashboard via SSE for live monitoring
 
 ## Enums
 
@@ -289,7 +278,7 @@ All database access goes through `db/repositories.py`. Key repository classes:
 | `NormalizedFeeRepository` | NormalizedFee | `get_by_snapshot()`, `bulk_create()`, `query_with_filters()` |
 | `FeeChangeRepository` | FeeChange | `get_recent()`, `get_by_exchange()`, `bulk_create()` |
 | `SubscriberRepository` | Subscriber | `get_by_frequency()`, `get_by_email()` |
-| `AgentRunRepository` | AgentRun + AgentEvent | `create_run()`, `add_event()`, `get_active_runs()` |
+| `ScrapeLogRepository` | ScrapeLog | `create()`, `update_status()`, `get_recent()`, `get_running()` |
 
 All methods are async, accepting an `AsyncSession` parameter.
 

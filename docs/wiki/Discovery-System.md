@@ -60,20 +60,21 @@ Each candidate URL is probed before AI evaluation:
 2. **First 2KB fetch** — provides a content snippet for the AI to evaluate
 3. Filters out obviously irrelevant URLs (non-200 status, non-document types)
 
-### Discovery Agent (`ai/agents/discovery.py`)
+### Discovery Subagent (`agents/subagents/discovery.py`)
 
-A CHEAP-tier PydanticAI agent that evaluates the candidate URL list. Input includes:
+A Claude Agent SDK subagent (`AgentDefinition`) that evaluates the candidate URL list. The orchestrator delegates to it via the `Task` tool. Input includes:
 - List of candidate URLs with snippets and content types
 - Exchange metadata (name, operator, current URL if any)
 
-Returns `UrlEvaluationResult`:
-```python
-@dataclass
-class UrlEvaluationResult:
-    primary_url: str          # Best fee schedule URL
-    alternate_urls: list[str] # Additional relevant URLs
-    confidence: float         # 0.0 - 1.0
-    reasoning: str            # Why this URL was chosen
+Returns JSON:
+```json
+{
+  "primary_url": "https://...",
+  "alternate_urls": ["https://..."],
+  "recommended_format": "PDF",
+  "confidence": 0.85,
+  "reasoning": "Official exchange domain with direct fee schedule link"
+}
 ```
 
 ### Pipeline (`discovery/pipeline.py`)

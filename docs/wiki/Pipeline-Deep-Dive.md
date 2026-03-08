@@ -33,8 +33,7 @@ sequenceDiagram
     participant Exchange as Exchange Website
     participant MinIO
     participant Parser as PDF/HTML Parser
-    participant AI as AI Extractor
-    participant LLM as LLM Provider
+    participant AI as Claude Agent SDK
     participant Normalizer
     participant Differ as Change Detector
     participant SMTP as Email Server
@@ -59,21 +58,18 @@ sequenceDiagram
             Celery->>DB: Create FeeScheduleSnapshot (version++)
             Celery->>MinIO: Store raw documents
 
-            Note over Celery,LLM: Stage 3: Parsing + AI Extraction
+            Note over Celery,AI: Stage 3: Parsing + AI Extraction
             Celery->>Parser: Parse primary document
             Parser-->>Celery: ExtractedDocument (text + tables)
 
             alt Profile exists and matches
                 Celery->>Celery: Profile-based extraction (zero AI cost)
             else No profile or structure changed
-                Celery->>AI: AI extraction pipeline
-                loop For each section group
-                    AI->>LLM: Extract fees from section
-                    LLM-->>AI: Structured fee data
-                end
-                AI->>LLM: Validate extraction
-                LLM-->>AI: ValidationResult
-                AI-->>Celery: ExtractionResult (fees + confidence)
+                Celery->>AI: Run orchestrator pipeline
+                Note over AI: Orchestrator calls MCP tools<br/>+ delegates to subagents
+                AI->>AI: Extractor subagent extracts fees
+                AI->>AI: Validator subagent validates
+                AI-->>Celery: ResultMessage (fees + cost + tokens)
                 Celery->>Celery: Build/update extraction profile
             end
 
@@ -167,33 +163,42 @@ ExtractedDocument
 
 ### AI Extraction Pipeline
 
-**Entry point**: `parser/ai_extractor.py: AIExtractor`
+**Entry point**: `agents/pipeline.py: run_exchange_pipeline`
 
-The AI extraction pipeline processes the parsed document through multiple stages:
+The AI extraction pipeline is driven by the Claude Agent SDK orchestrator, which autonomously coordinates MCP tools and subagents:
 
 ```mermaid
 graph TD
-    A[ExtractedDocument] --> B[Section Splitter]
-    B --> C[Classify Sections<br/>context vs. fee]
-    C --> D[Group Fee Sections<br/>≤15,000 chars each]
-    D --> E{For Each Group}
-    E --> F[Build Prompt<br/>section text + tables +<br/>exchange prompt]
-    F --> G[Section Extractor Agent<br/>EXPENSIVE tier]
-    G --> H[Append to extracted_fees]
-    H --> E
-    E -->|All groups done| I[Fee Validator Agent<br/>MEDIUM tier]
-    I --> J{Confidence OK?<br/>Budget remaining?}
-    J -->|Low confidence +<br/>budget available| K[Correction Agent<br/>EXPENSIVE tier]
-    J -->|Good confidence<br/>or over budget| L[ExtractionResult]
-    K --> L
+    A[Orchestrator Agent] --> B[load_exchange<br/>MCP tool]
+    B --> C[scrape_document<br/>MCP tool]
+    C --> D[check_document_changed<br/>MCP tool]
+    D --> E{Changed?}
+    E -->|No| F[Skip - NO_CHANGE]
+    E -->|Yes| G[parse_document<br/>MCP tool]
+    G --> H{try_profile_extract<br/>MCP tool}
+    H -->|Profile match| I[Zero-cost extraction]
+    H -->|No profile| J[load_exchange_prompt<br/>MCP tool]
+    J --> K[Extractor Subagent<br/>via Task tool]
+    K --> L[Validator Subagent<br/>via Task tool]
+    L --> M{Confidence ≥ 0.8?}
+    M -->|No| N[Retry extractor<br/>with corrections]
+    M -->|Yes| O[normalize_fees<br/>MCP tool]
+    N --> O
+    I --> O
+    O --> P[save_snapshot + save_profile<br/>MCP tools]
+    P --> Q[detect_changes<br/>MCP tool]
+    Q --> R{Changes found?}
+    R -->|Yes| S[send_notifications<br/>MCP tool]
+    R -->|No| T[Done]
+    S --> T
 ```
 
 **Key behaviors**:
-- Documents are split into sections, classified (context vs. fee-bearing), then grouped into chunks of ≤15,000 characters
-- Context sections (footnotes, tier definitions) are included as reference material but not extracted from
-- Each group gets its own AI call with the exchange-specific prompt
-- Budget is checked before each group — extraction stops early if over budget
-- Cancellation checkpoints exist before each group (for admin cancel from dashboard)
+- The orchestrator autonomously decides tool call order based on execution rules in its system prompt
+- Documents are parsed then passed to the extractor subagent with exchange-specific prompts
+- The validator subagent checks extraction quality; if confidence < 0.8, one retry with corrections
+- All pipeline steps are exposed as MCP tools — the orchestrator calls them like function calls
+- Real-time events are broadcast via Redis pub/sub to the dashboard monitor
 
 See [AI Agent System](AI-Agent-System.md) for full agent details.
 
@@ -292,11 +297,11 @@ Email delivery via `aiosmtplib`. Subscribers can filter by specific exchange cod
 - **Budget guardrails**: Per-exchange ($2.00) and daily ($15.00) caps prevent runaway AI costs
 - **Retry with backoff**: Celery tasks retry on transient failures
 - **Graceful degradation**: If AI extraction fails, the pipeline records the failure in `ScrapeLog` but doesn't crash other exchanges
-- **Cancellation**: Admin can cancel in-flight runs via dashboard; checked at group boundaries
+- **Kill support**: Admin can kill in-flight runs via dashboard monitor; revokes Celery task via `celery_app.control.revoke(id, terminate=True)`
 
 ## Related Pages
 
-- [AI Agent System](AI-Agent-System.md) — agent details, model routing
+- [AI Agent System](AI-Agent-System.md) — Claude Agent SDK orchestrator, MCP tools, subagents
 - [Extraction Profiles](Extraction-Profiles.md) — zero-cost path details
 - [Normalization Engine](Normalization-Engine.md) — V2/V3 mapping rules
 - [Worker Architecture](Worker-Architecture.md) — task definitions, scheduling

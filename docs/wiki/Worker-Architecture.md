@@ -152,31 +152,21 @@ This gives Celery's reliable task execution (retries, time limits, result tracki
 
 ## Pipeline Orchestration
 
-The main pipeline (`workers/pipelines.py: run_scrape_pipeline`) orchestrates all stages within a single Celery task:
+The main pipeline is driven by the Claude Agent SDK orchestrator (`agents/pipeline.py: run_exchange_pipeline`). The Celery task creates a `ScrapeLog` record, then delegates to the SDK:
 
 ```mermaid
 graph TD
-    A[Load Exchange] --> B{Discovery needed?}
-    B -->|Yes| C[Run URL Discovery]
-    B -->|No| D[Collect Documents]
-    C --> D
-    D --> E{Hash changed?}
-    E -->|No| F[Skip - No changes]
-    E -->|Yes| G[Create Snapshot]
-    G --> H[Store in MinIO]
-    H --> I[Parse Document]
-    I --> J{Profile match?}
-    J -->|Yes| K[Profile Extraction]
-    J -->|No| L[AI Extraction]
-    K --> M[Normalize]
-    L --> N[Build/Update Profile]
-    N --> M
-    M --> O[Detect Changes]
-    O --> P{Changes found?}
-    P -->|Yes| Q[Save Changes + Notify]
-    P -->|No| R[Done]
-    Q --> R
+    A[Celery Task] --> B[Create ScrapeLog<br/>status=RUNNING]
+    B --> C[run_exchange_pipeline<br/>Claude Agent SDK]
+    C --> D[Orchestrator Agent<br/>coordinates MCP tools + subagents]
+    D --> E{ResultMessage}
+    E -->|is_error=false| F[Update ScrapeLog<br/>SUCCESS / NO_CHANGE]
+    E -->|is_error=true| G[Update ScrapeLog<br/>FAILED]
+    F --> H[Store cost/tokens/turns]
+    G --> H
 ```
+
+The orchestrator autonomously decides the execution order based on its system prompt rules — loading exchange config, scraping documents, checking for changes, delegating extraction to subagents, normalizing fees, detecting changes, and sending notifications. All these operations are MCP tools that the orchestrator calls like function calls.
 
 ## Monitoring
 
@@ -190,11 +180,11 @@ Flower runs at `:5555` providing:
 
 ### Dashboard Monitor
 
-The admin dashboard at `/dashboard/monitor` provides AI-specific monitoring:
-- Live event stream via SSE
-- Per-run cost tracking
-- Model usage breakdown
-- Cancel capability
+The admin dashboard at `/dashboard/monitor` provides pipeline monitoring:
+- Live event stream via SSE (Redis pub/sub)
+- Per-run cost tracking (from Claude Agent SDK `ResultMessage`)
+- Expandable log panels for completed runs (from Redis lists)
+- Kill button to revoke Celery tasks
 
 See [Dashboard & Monitoring](Dashboard-and-Monitoring.md) for details.
 

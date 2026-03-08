@@ -157,7 +157,7 @@ For a typical exchange with 50+ fees:
 
 | Extraction Method | API Calls | Est. Cost |
 |-------------------|-----------|-----------|
-| Full AI extraction | 3–8 calls | $0.10–$0.50 |
+| Full AI extraction (Claude Agent SDK) | 1 pipeline run | $0.10–$0.50 |
 | Profile extraction | 0 calls | $0.00 |
 
 Over 19 exchanges running daily, profiles can save **$2–$10/day** once all exchanges have active profiles.

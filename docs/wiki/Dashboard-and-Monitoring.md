@@ -72,49 +72,48 @@ The monitoring system provides live visibility into AI extraction pipelines. **A
 ```mermaid
 sequenceDiagram
     participant Worker as Celery Worker
-    participant Redis as Redis Pub/Sub
-    participant DB as PostgreSQL
+    participant Redis as Redis Pub/Sub + Lists
     participant SSE as SSE Endpoint
     participant Browser
 
-    Worker->>DB: Save AgentEvent
-    Worker->>Redis: Publish to exnot:events:{run_id}
+    Worker->>Redis: Publish event to exnot:pipeline:events:{exchange_code}
+    Worker->>Redis: Append event to exnot:pipeline:log:{scrape_log_id}
 
-    Browser->>SSE: Connect to /dashboard/monitor/stream
-    SSE->>DB: Replay existing events (catch-up)
-    SSE-->>Browser: Historical events
+    Browser->>SSE: Connect to /dashboard/pipeline/{exchange_code}/stream
+    SSE->>Redis: Subscribe to channel
 
-    loop Real-time stream
+    loop Real-time stream (RUNNING pipelines)
         Redis-->>SSE: New event published
         SSE-->>Browser: SSE event
-        Browser->>Browser: HTMX update DOM
+        Browser->>Browser: Update DOM
     end
 
-    Note over Browser: Admin clicks "Cancel"
-    Browser->>SSE: POST /dashboard/monitor/{run_id}/stop
-    SSE->>Redis: Set cancel flag
-    SSE->>Worker: Revoke Celery task (SIGTERM)
+    Note over Browser: For completed runs
+    Browser->>SSE: Expand log panel (HTMX)
+    SSE->>Redis: Read stored events from list
+
+    Note over Browser: Admin clicks "Kill"
+    Browser->>SSE: POST /dashboard/monitor/{scrape_log_id}/kill
+    SSE->>Worker: Revoke Celery task (terminate=True)
 ```
 
 ### Event Flow
 
-1. **Worker** saves `AgentEvent` records to PostgreSQL and publishes to Redis pub/sub
-2. **SSE endpoint** (`/dashboard/monitor/stream`) first replays existing events from DB (catch-up for late-joining clients)
-3. Then subscribes to Redis channels (`exnot:events:{run_id}` or `exnot:events:all`)
-4. Events are streamed as JSON to the browser via SSE
-5. HTMX processes events and updates the DOM in real-time
+1. **Worker** publishes events to Redis pub/sub (`exnot:pipeline:events:{exchange_code}`) and persists them to Redis lists (`exnot:pipeline:log:{scrape_log_id}`, 24h TTL)
+2. **SSE endpoint** (`/dashboard/pipeline/{exchange_code}/stream`) subscribes to the Redis channel for live events
+3. For **completed runs**, stored events are read from Redis lists when the user expands a log panel
+4. Events are streamed as JSON to the browser via SSE (powered by `sse-starlette`)
+5. The monitor page uses inline expandable rows — live SSE for RUNNING status, stored logs for completed runs
 
 ### Event Types Displayed
 
 | Event | Display |
 |-------|---------|
-| `PIPELINE_START` | Run card appears with exchange name, model info |
-| `PIPELINE_STEP` | Progress update (e.g., "Extracting group 2/5") |
-| `AI_CALL_START` | Spinner, prompt preview |
-| `AI_CALL_COMPLETE` | Token count, cost, latency |
-| `BUDGET_WARNING` | Yellow warning badge |
-| `PIPELINE_COMPLETE` | Green checkmark, total cost summary |
-| `PIPELINE_ERROR` | Red error with message |
+| `info` | Pipeline progress messages (started, tool calls, completions) |
+| `error` | Red error with message (pipeline failures, SDK errors) |
+| `tool_call` | MCP tool invocations (scrape, parse, normalize, etc.) |
+| `subagent` | Subagent delegation (extractor, validator, discovery) |
+| `complete` | Green checkmark with total cost and token summary |
 
 ### Run Events Detail View
 
@@ -124,16 +123,12 @@ GET /dashboard/monitor/events/{run_id}
 ```
 Returns an HTML fragment (not a full page) that HTMX inserts into the run card.
 
-### Cancellation
+### Kill Support
 
-Admins can cancel runs:
-- **Single run**: `POST /dashboard/monitor/{run_id}/stop`
-- **All runs**: `POST /dashboard/monitor/stop-all`
-
-Cancellation:
-1. Sets a Redis flag `exnot:cancel:{run_id}`
-2. Revokes the Celery task with `SIGTERM`
-3. `AIExtractor` checks the cancel flag before each section group
+Admins can kill running pipelines via the monitor UI:
+- Kill button revokes the Celery task via `celery_app.control.revoke(id, terminate=True)`
+- ScrapeLog is updated to `FAILED` with "Manually killed" error message
+- The `celery_task_id` stored in ScrapeLog enables task identification for revocation
 
 ## HTMX Patterns
 

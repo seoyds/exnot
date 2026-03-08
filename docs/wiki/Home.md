@@ -8,13 +8,13 @@
 |----------|-------------|
 | [Architecture Overview](Architecture-Overview.md) | System topology, tech stack, service map |
 | [Pipeline Deep Dive](Pipeline-Deep-Dive.md) | Scrape → Parse → Normalize → Diff → Notify |
-| [AI Agent System](AI-Agent-System.md) | Agent graph, model routing, cost tracking, per-exchange prompts |
+| [AI Agent System](AI-Agent-System.md) | Claude Agent SDK orchestrator, MCP tools, subagents, per-exchange prompts |
 | [Database Schema](Database-Schema.md) | ER diagram, all models, relationships, enums |
 | [API Reference](API-Reference.md) | REST endpoints, auth, request/response examples |
 | [Dashboard & Monitoring](Dashboard-and-Monitoring.md) | Dashboard pages, SSE live monitoring, HTMX |
 | [Exchange Definitions](Exchange-Definitions.md) | YAML format, registry, adding new exchanges |
 | [Worker Architecture](Worker-Architecture.md) | Celery queues, tasks, beat schedule, deduplication |
-| [Configuration Guide](Configuration-Guide.md) | All env vars, model routing, budget tuning |
+| [Configuration Guide](Configuration-Guide.md) | All env vars, Claude SDK models, budget tuning |
 | [Extraction Profiles](Extraction-Profiles.md) | Zero-cost re-extraction, fingerprinting, profile lifecycle |
 | [Normalization Engine](Normalization-Engine.md) | V2/V3 schema, fee taxonomy, amount storage |
 | [Discovery System](Discovery-System.md) | URL discovery pipeline, SerpAPI integration |
@@ -38,7 +38,7 @@ graph LR
 | **API & Dashboard** | FastAPI + Jinja2 + HTMX + Tailwind CSS |
 | **Database** | PostgreSQL 16 (async via SQLAlchemy 2.x + asyncpg) |
 | **Task Queue** | Celery 5.x + Redis broker |
-| **AI/LLM** | PydanticAI + LiteLLM → OpenRouter / DashScope |
+| **AI/LLM** | Claude Agent SDK (`claude-agent-sdk`) — orchestrator + MCP tools + subagents |
 | **PDF Parsing** | PyMuPDF (fitz) + pdfplumber |
 | **Web Scraping** | httpx + BeautifulSoup4 + Playwright |
 | **Object Storage** | MinIO |

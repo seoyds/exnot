@@ -122,7 +122,7 @@ graph LR
 
 2. **Create exchange prompt** (optional but recommended):
    ```python
-   # src/exnot/ai/prompts/new_exchange.py
+   # src/exnot/agents/prompts/new_exchange.py
    PROMPT = """
    ## NEW_EXCHANGE Fee Schedule Structure
    - Tables are organized by participant type...
@@ -130,7 +130,7 @@ graph LR
    """
    ```
 
-3. **Register the prompt** in `src/exnot/ai/prompts/registry.py`:
+3. **Register the prompt** in `src/exnot/agents/prompts/registry.py`:
    ```python
    from .new_exchange import PROMPT as NEW_EXCHANGE_PROMPT
 

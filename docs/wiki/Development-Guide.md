@@ -8,7 +8,8 @@
 - Docker & Docker Compose
 - PostgreSQL 16 (or use Docker)
 - Redis 7 (or use Docker)
-- An OpenRouter API key (for AI features)
+- Claude Agent SDK authentication (`~/.claude/.claude.json`) for AI features
+- Node.js (required by Claude Agent SDK — bundles Claude Code CLI as subprocess)
 
 ## Local Setup
 
@@ -38,8 +39,8 @@ Minimum required variables:
 DATABASE_URL=postgresql+asyncpg://exnot:password@localhost:5432/exnot
 DATABASE_URL_SYNC=postgresql+psycopg2://exnot:password@localhost:5432/exnot
 REDIS_URL=redis://localhost:6379/0
-OPENROUTER_API_KEY=sk-or-v1-your-key
 SECRET_KEY=your-secret-key
+# Claude Agent SDK auth via ~/.claude/.claude.json (no API key env var needed)
 ADMIN_EMAIL=admin@example.com
 ADMIN_PASSWORD=changeme
 ```
@@ -196,8 +197,8 @@ alembic history
 ### Adding a New Exchange
 
 1. Create YAML file in `src/exnot/exchanges/definitions/`
-2. Create prompt file in `src/exnot/ai/prompts/` (optional)
-3. Register prompt in `src/exnot/ai/prompts/registry.py`
+2. Create prompt file in `src/exnot/agents/prompts/` (optional)
+3. Register prompt in `src/exnot/agents/prompts/registry.py`
 4. Restart app (auto-seeds to DB)
 5. Run discovery: `POST /api/v1/admin/discover/{code}`
 6. Trigger scrape: `POST /api/v1/admin/scrape/{code}`
@@ -221,9 +222,9 @@ alembic history
 ### Common Issues
 
 **AI extraction returns no fees**:
-1. Check the exchange prompt in `ai/prompts/` — does it match the document structure?
-2. Look at `AgentEvent` records in the monitor for the raw AI response
-3. Try a different model: `AI_MODEL_FEE_EXTRACTION=anthropic/claude-3.5-sonnet`
+1. Check the exchange prompt in `agents/prompts/` — does it match the document structure?
+2. Check the pipeline monitor at `/dashboard/monitor` for live/stored events
+3. Check worker logs: `docker compose logs worker --tail=50`
 
 **Scrape hangs or times out**:
 1. Check if the exchange requires `scraper_type: BROWSER`
@@ -251,12 +252,13 @@ FROM fee_changes fc
 JOIN exchanges e ON e.id = fc.exchange_id
 ORDER BY fc.detected_at DESC LIMIT 20;
 
--- AI costs by exchange
+-- AI costs by exchange (from ScrapeLog)
 SELECT e.code, COUNT(*) as runs,
-       SUM(ar.total_cost_usd) as total_cost,
-       AVG(ar.total_cost_usd) as avg_cost
-FROM agent_runs ar
-JOIN exchanges e ON e.id = ar.exchange_id
+       SUM(sl.total_cost_usd) as total_cost,
+       AVG(sl.total_cost_usd) as avg_cost
+FROM scrape_logs sl
+JOIN exchanges e ON e.id = sl.exchange_id
+WHERE sl.status = 'SUCCESS'
 GROUP BY e.code ORDER BY total_cost DESC;
 ```
 
