@@ -58,6 +58,13 @@ def serialize_sdk_message(message: object) -> dict[str, Any]:
         }
 
     if isinstance(message, ResultMessage):
+        usage = message.usage
+        if isinstance(usage, dict):
+            usage_data = usage
+        elif usage is not None:
+            usage_data = {"total_tokens": getattr(usage, "total_tokens", None)}
+        else:
+            usage_data = None
         return {
             "type": "result",
             "subtype": message.subtype,
@@ -66,6 +73,8 @@ def serialize_sdk_message(message: object) -> dict[str, Any]:
             "num_turns": message.num_turns,
             "is_error": message.is_error,
             "result": (message.result[:500] if message.result else None),
+            "usage": usage_data,
+            "duration_ms": getattr(message, "duration_ms", None),
         }
 
     # SystemMessage, UserMessage, or unknown

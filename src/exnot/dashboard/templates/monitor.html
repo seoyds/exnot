@@ -319,6 +319,22 @@ function updateStatusBadge(el, status) {
     el.innerHTML = '<span class="mr-1 h-1.5 w-1.5 rounded-full ' + cfg.dot + ' inline-block"></span>' + cfg.label;
 }
 
+function appendExpandableToEl(el, labelHtml, text, previewLen) {
+    previewLen = previewLen || 200;
+    if (!text || text.length <= previewLen) {
+        appendLineToEl(el, '', labelHtml + ' ' + escapeHtml(text || ''));
+        return;
+    }
+    var div = document.createElement('div');
+    var time = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    div.className = 'py-0.5 border-b border-slate-100 dark:border-slate-800';
+    div.innerHTML = '<span class="text-slate-400 dark:text-slate-500 mr-2">' + time + '</span>' +
+        labelHtml + ' ' + escapeHtml(text.substring(0, previewLen)) + '...' +
+        '<details class="inline ml-1"><summary class="cursor-pointer text-blue-500 dark:text-blue-400 text-xs inline">[show full]</summary>' +
+        '<pre class="mt-1 p-2 bg-slate-100 dark:bg-slate-800 rounded text-xs overflow-x-auto max-h-64 overflow-y-auto whitespace-pre-wrap">' + escapeHtml(text) + '</pre></details>';
+    el.appendChild(div);
+}
+
 function appendEventToEl(el, data) {
     if (data.type === 'assistant') {
         if (data.blocks) {
@@ -333,14 +349,13 @@ function appendEventToEl(el, data) {
                         appendCollapsibleToEl(el, 'Input', block.input);
                     }
                 } else if (block.type === 'text') {
-                    appendLineToEl(el, 'text',
-                        '<span class="text-blue-600 dark:text-blue-400 font-semibold">TEXT</span> ' +
-                        escapeHtml(block.text.substring(0, 500)) + (block.text.length > 500 ? '...' : ''));
+                    appendExpandableToEl(el,
+                        '<span class="text-blue-600 dark:text-blue-400 font-semibold">TEXT</span>',
+                        block.text, 200);
                 } else if (block.type === 'reasoning') {
-                    appendLineToEl(el, 'reasoning',
-                        '<span class="text-amber-600 dark:text-amber-400 font-semibold">THINK</span> ' +
-                        '<span class="text-slate-500 dark:text-slate-400">' + escapeHtml(block.text.substring(0, 300)) + '</span>' +
-                        (block.text.length > 300 ? '...' : ''));
+                    appendExpandableToEl(el,
+                        '<span class="text-amber-600 dark:text-amber-400 font-semibold">THINK</span>',
+                        block.text, 150);
                 }
             });
         }
@@ -349,23 +364,28 @@ function appendEventToEl(el, data) {
         var badge = isError
             ? '<span class="text-red-600 dark:text-red-400 font-bold">RESULT (ERROR)</span>'
             : '<span class="text-green-600 dark:text-green-400 font-bold">RESULT</span>';
+        var usage = data.usage || {};
+        var tokens = usage.total_tokens;
+        var tokensStr = tokens ? ' tokens=' + tokens.toLocaleString() : '';
+        var durMs = data.duration_ms;
+        var durStr = durMs ? ' duration=' + (durMs / 1000).toFixed(1) + 's' : '';
         appendLineToEl(el, isError ? 'error' : 'success',
             badge + ' stop=' + escapeHtml(data.stop_reason || '?') +
             ' cost=$' + (data.total_cost_usd ? parseFloat(data.total_cost_usd).toFixed(4) : '0') +
-            ' turns=' + (data.num_turns || 0));
+            ' turns=' + (data.num_turns || 0) + tokensStr + durStr);
         if (data.result) {
             appendCollapsibleToEl(el, 'Result output', data.result);
         }
     } else if (data.type === 'log') {
         var levelColors = { info: 'text-blue-600 dark:text-blue-400', error: 'text-red-600 dark:text-red-400', warn: 'text-amber-600 dark:text-amber-400' };
         var color = levelColors[data.level] || 'text-slate-600 dark:text-slate-400';
-        appendLineToEl(el, data.level,
-            '<span class="' + color + ' font-semibold">' + (data.level || 'LOG').toUpperCase() + '</span> ' +
-            escapeHtml(data.message || ''));
+        appendExpandableToEl(el,
+            '<span class="' + color + ' font-semibold">' + (data.level || 'LOG').toUpperCase() + '</span>',
+            data.message || '', 200);
     } else if (data.type === 'system') {
-        appendLineToEl(el, 'system',
-            '<span class="text-slate-500 dark:text-slate-400 font-semibold">SYS</span> ' +
-            escapeHtml(data.raw || ''));
+        appendExpandableToEl(el,
+            '<span class="text-slate-500 dark:text-slate-400 font-semibold">SYS</span>',
+            data.raw || '', 200);
     }
     el.scrollTop = el.scrollHeight;
 }

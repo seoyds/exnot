@@ -736,6 +736,20 @@ async def get_pipeline_logs(
 
     import html
 
+    def _expandable(label_html: str, full_text: str, preview_len: int = 200) -> str:
+        """Render text with a clickable expand if longer than preview_len."""
+        escaped = html.escape(full_text)
+        if len(full_text) <= preview_len:
+            return f'<div class="py-0.5 border-b border-slate-100 dark:border-slate-800">{label_html} {escaped}</div>'
+        preview = html.escape(full_text[:preview_len])
+        return (
+            f'<div class="py-0.5 border-b border-slate-100 dark:border-slate-800">{label_html} '
+            f'<span>{preview}...</span>'
+            f'<details class="inline ml-1"><summary class="cursor-pointer text-blue-500 dark:text-blue-400 text-xs inline">[show full]</summary>'
+            f'<pre class="mt-1 p-2 bg-slate-100 dark:bg-slate-800 rounded text-xs overflow-x-auto max-h-64 overflow-y-auto whitespace-pre-wrap">{escaped}</pre>'
+            f'</details></div>'
+        )
+
     lines = []
     for event in events:
         etype = event.get("type", "unknown")
@@ -751,26 +765,29 @@ async def get_pipeline_logs(
                                  f'<span class="text-purple-600 dark:text-purple-400 font-semibold">TOOL</span> '
                                  f'{name}{sub}{model_span}'
                                  f'</div>')
-                    inp = html.escape(block.get("input", ""))
+                    inp = block.get("input", "")
                     if inp:
                         lines.append(f'<details class="ml-4 mb-1"><summary class="cursor-pointer text-slate-500 dark:text-slate-400 text-xs">Input</summary>'
-                                     f'<pre class="mt-1 p-2 bg-slate-100 dark:bg-slate-800 rounded text-xs overflow-x-auto max-h-48 overflow-y-auto">{inp}</pre></details>')
+                                     f'<pre class="mt-1 p-2 bg-slate-100 dark:bg-slate-800 rounded text-xs overflow-x-auto max-h-48 overflow-y-auto">{html.escape(inp)}</pre></details>')
                 elif btype == "text":
-                    text = html.escape(block.get("text", "")[:500])
-                    lines.append(f'<div class="py-0.5 border-b border-slate-100 dark:border-slate-800">'
-                                 f'<span class="text-blue-600 dark:text-blue-400 font-semibold">TEXT</span> {text}</div>')
+                    label = '<span class="text-blue-600 dark:text-blue-400 font-semibold">TEXT</span>'
+                    lines.append(_expandable(label, block.get("text", "")))
                 elif btype == "reasoning":
-                    text = html.escape(block.get("text", "")[:300])
-                    lines.append(f'<div class="py-0.5 border-b border-slate-100 dark:border-slate-800">'
-                                 f'<span class="text-amber-600 dark:text-amber-400 font-semibold">THINK</span> '
-                                 f'<span class="text-slate-500 dark:text-slate-400">{text}</span></div>')
+                    label = '<span class="text-amber-600 dark:text-amber-400 font-semibold">THINK</span>'
+                    lines.append(_expandable(label, block.get("text", ""), preview_len=150))
         elif etype == "result":
             is_error = event.get("is_error", False)
             badge = '<span class="text-red-600 dark:text-red-400 font-bold">RESULT (ERROR)</span>' if is_error else '<span class="text-green-600 dark:text-green-400 font-bold">RESULT</span>'
             cost = float(event.get("total_cost_usd", 0) or 0)
+            turns = event.get("num_turns", 0)
+            usage = event.get("usage") or {}
+            tokens = usage.get("total_tokens", "")
+            tokens_str = f" tokens={tokens:,}" if tokens else ""
+            duration = event.get("duration_ms")
+            dur_str = f" duration={duration / 1000:.1f}s" if duration else ""
             lines.append(f'<div class="py-0.5 border-b border-slate-100 dark:border-slate-800">'
                          f'{badge} stop={html.escape(str(event.get("stop_reason", "?")))} '
-                         f'cost=${cost:.4f} turns={event.get("num_turns", 0)}</div>')
+                         f'cost=${cost:.4f} turns={turns}{tokens_str}{dur_str}</div>')
             result_text = event.get("result")
             if result_text:
                 lines.append(f'<details class="ml-4 mb-1"><summary class="cursor-pointer text-slate-500 dark:text-slate-400 text-xs">Result output</summary>'
@@ -779,13 +796,11 @@ async def get_pipeline_logs(
             level = event.get("level", "info")
             color_map = {"info": "text-blue-600 dark:text-blue-400", "error": "text-red-600 dark:text-red-400", "warn": "text-amber-600 dark:text-amber-400"}
             color = color_map.get(level, "text-slate-600 dark:text-slate-400")
-            lines.append(f'<div class="py-0.5 border-b border-slate-100 dark:border-slate-800">'
-                         f'<span class="{color} font-semibold">{html.escape(level.upper())}</span> '
-                         f'{html.escape(event.get("message", ""))}</div>')
+            label = f'<span class="{color} font-semibold">{html.escape(level.upper())}</span>'
+            lines.append(_expandable(label, event.get("message", "")))
         elif etype == "system":
-            lines.append(f'<div class="py-0.5 border-b border-slate-100 dark:border-slate-800">'
-                         f'<span class="text-slate-500 dark:text-slate-400 font-semibold">SYS</span> '
-                         f'{html.escape(event.get("raw", "")[:300])}</div>')
+            label = '<span class="text-slate-500 dark:text-slate-400 font-semibold">SYS</span>'
+            lines.append(_expandable(label, event.get("raw", "")))
 
     return HTMLResponse(
         f'<div class="text-xs text-slate-500 dark:text-slate-400 mb-2">{len(events)} events stored</div>'

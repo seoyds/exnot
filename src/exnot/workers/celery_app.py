@@ -56,3 +56,45 @@ celery_app.conf.result_expires = 86400  # 24 hours
 
 # Auto-discover tasks
 celery_app.autodiscover_tasks(["exnot.workers.tasks"])
+
+
+@celery_app.on_after_finalize.connect
+def cleanup_stale_running_logs(sender, **kwargs):
+    """Mark any RUNNING scrape logs as FAILED on worker startup.
+
+    These are leftovers from a previous worker that was killed mid-run.
+    """
+    try:
+        from datetime import datetime
+
+        from sqlalchemy import update
+
+        from exnot.db.engine import get_sync_session
+        from exnot.db.models import ScrapeLog, ScrapeStatus
+
+        session = get_sync_session()
+        try:
+            result = session.execute(
+                update(ScrapeLog)
+                .where(ScrapeLog.status == ScrapeStatus.RUNNING)
+                .values(
+                    status=ScrapeStatus.FAILED,
+                    completed_at=datetime.utcnow(),
+                    error_message="Worker restarted during execution",
+                )
+            )
+            if result.rowcount > 0:
+                session.commit()
+                import logging
+
+                logging.getLogger(__name__).info(
+                    "Cleaned up %d stale RUNNING scrape logs", result.rowcount
+                )
+            else:
+                session.rollback()
+        except Exception:
+            session.rollback()
+        finally:
+            session.close()
+    except Exception:
+        pass  # Don't block worker startup

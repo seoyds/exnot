@@ -221,10 +221,11 @@ def scrape_and_process_exchange(self, exchange_code: str, force: bool = False):
                     # Populate usage stats from ResultMessage
                     if result_msg:
                         log_entry.total_cost_usd = result_msg.total_cost_usd
-                        log_entry.num_turns = result_msg.num_turns
-                        usage = result_msg.usage
+                        log_entry.num_turns = getattr(result_msg, "num_turns", None)
+                        usage = getattr(result_msg, "usage", None)
+                        logger.info(f"[{exchange_code}] ResultMessage usage={usage} type={type(usage)}")
                         if isinstance(usage, dict):
-                            log_entry.total_tokens = usage.get("total_tokens")
+                            log_entry.total_tokens = usage.get("total_tokens") or usage.get("input_tokens", 0) + usage.get("output_tokens", 0) or None
                         elif usage is not None:
                             log_entry.total_tokens = getattr(usage, "total_tokens", None)
                     session.commit()
