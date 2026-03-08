@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}SDK Test{% endblock %}
+
+{% block header %}
+<header class="bg-white shadow-sm">
+    <div class="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
+        <h1 class="text-2xl font-bold tracking-tight text-slate-900">Claude Agent SDK Test</h1>
+        <p class="mt-1 text-sm text-slate-500">Quick connectivity check — sends a simple prompt via the SDK and displays the response.</p>
+    </div>
+</header>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Status Card -->
+    <div class="bg-white shadow-sm rounded-lg border border-slate-200 p-6">
+        <h2 class="text-lg font-semibold text-slate-800 mb-4">SDK Info</h2>
+        <dl class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
+            <div>
+                <dt class="text-slate-500">SDK Version</dt>
+                <dd class="font-mono text-slate-800">{{ sdk_info.sdk_version or "Not installed" }}</dd>
+            </div>
+            <div>
+                <dt class="text-slate-500">CLI Path</dt>
+                <dd class="font-mono text-slate-800 truncate" title="{{ sdk_info.cli_path or 'N/A' }}">{{ sdk_info.cli_path or "N/A" }}</dd>
+            </div>
+            <div>
+                <dt class="text-slate-500">Auth Config</dt>
+                <dd>
+                    {% if sdk_info.has_auth %}
+                    <span class="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800">Found</span>
+                    {% else %}
+                    <span class="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-800">Missing</span>
+                    {% endif %}
+                </dd>
+            </div>
+        </dl>
+    </div>
+
+    <!-- Test Runner -->
+    <div class="bg-white shadow-sm rounded-lg border border-slate-200 p-6">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-semibold text-slate-800">Run Test</h2>
+            <button id="run-btn"
+                    hx-post="/dashboard/admin/sdk-test/run"
+                    hx-target="#test-output"
+                    hx-swap="innerHTML"
+                    hx-indicator="#spinner"
+                    class="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 transition-colors disabled:opacity-50"
+                    onclick="this.disabled=true; document.getElementById('test-output').innerHTML='<p class=\'text-slate-500 animate-pulse\'>Running SDK test...</p>'; setTimeout(()=>this.disabled=false, 30000);">
+                <svg id="spinner" class="htmx-indicator h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                </svg>
+                Run SDK Test
+            </button>
+        </div>
+        <p class="text-sm text-slate-500 mb-4">Sends <code class="bg-slate-100 px-1.5 py-0.5 rounded text-xs">"Say hello in one sentence."</code> to the Claude Agent SDK and displays the full response.</p>
+
+        <!-- Output area -->
+        <div id="test-output" class="rounded-lg bg-slate-50 border border-slate-200 p-4 min-h-[120px] font-mono text-sm text-slate-700 whitespace-pre-wrap">
+            <p class="text-slate-400 italic">Click "Run SDK Test" to begin.</p>
+        </div>
+    </div>
+</div>
+{% endblock %}

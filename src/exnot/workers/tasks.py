@@ -8,6 +8,7 @@ exnot.db.engine.get_sync_session().
 import asyncio
 import json
 import logging
+import re
 from datetime import datetime, timedelta
 
 from sqlalchemy import delete, select
@@ -154,11 +155,84 @@ def scrape_and_process_exchange(self, exchange_code: str, force: bool = False):
 
     logger.info(f"[{exchange_code}] Starting scrape and process pipeline")
 
+    # Create scrape log entry at start so the monitor shows it immediately
+    scrape_log_id = None
+    session = get_sync_session()
+    try:
+        exchange = session.execute(select(Exchange).where(Exchange.code == exchange_code)).scalar_one_or_none()
+        if exchange:
+            log_entry = ScrapeLog(
+                exchange_id=exchange.id,
+                status=ScrapeStatus.RUNNING,
+                started_at=datetime.utcnow(),
+                celery_task_id=self.request.id,
+            )
+            session.add(log_entry)
+            session.flush()
+            scrape_log_id = log_entry.id
+            session.commit()
+    except Exception:
+        logger.exception(f"[{exchange_code}] Failed to create initial scrape log")
+        session.rollback()
+    finally:
+        session.close()
+
     try:
         # The new SDK pipeline handles DB persistence and notifications internally via tools
-        messages = run_exchange_pipeline_sync(exchange_code, force=force)
+        messages = run_exchange_pipeline_sync(exchange_code, force=force, scrape_log_id=str(scrape_log_id) if scrape_log_id else None)
 
         logger.info(f"[{exchange_code}] Pipeline complete with {len(messages)} SDK messages")
+
+        # Update scrape log with success status
+        if scrape_log_id:
+            session = get_sync_session()
+            try:
+                log_entry = session.get(ScrapeLog, scrape_log_id)
+                if log_entry:
+                    # Check ResultMessage for status details
+                    from claude_agent_sdk import ResultMessage
+
+                    result_text = ""
+                    result_msg = None
+                    for msg in messages:
+                        if isinstance(msg, ResultMessage):
+                            result_msg = msg
+                            result_text = msg.result or ""
+                            break
+
+                    # Determine if there were changes from the result JSON
+                    has_changes = False
+                    if '"status": "unchanged"' in result_text or '"status":"unchanged"' in result_text:
+                        log_entry.status = ScrapeStatus.NO_CHANGE
+                    else:
+                        log_entry.status = ScrapeStatus.SUCCESS
+                        if '"changes_detected"' in result_text:
+                            try:
+                                match = re.search(r'"changes_detected"\s*:\s*(\d+)', result_text)
+                                if match and int(match.group(1)) > 0:
+                                    has_changes = True
+                            except Exception:
+                                pass
+
+                    log_entry.has_changes = has_changes
+                    log_entry.completed_at = datetime.utcnow()
+                    log_entry.error_message = None
+
+                    # Populate usage stats from ResultMessage
+                    if result_msg:
+                        log_entry.total_cost_usd = result_msg.total_cost_usd
+                        log_entry.num_turns = result_msg.num_turns
+                        usage = result_msg.usage
+                        if isinstance(usage, dict):
+                            log_entry.total_tokens = usage.get("total_tokens")
+                        elif usage is not None:
+                            log_entry.total_tokens = getattr(usage, "total_tokens", None)
+                    session.commit()
+            except Exception:
+                logger.exception(f"[{exchange_code}] Failed to update scrape log on success")
+                session.rollback()
+            finally:
+                session.close()
 
         return {
             "exchange_code": exchange_code,
@@ -166,15 +240,25 @@ def scrape_and_process_exchange(self, exchange_code: str, force: bool = False):
         }
 
     except Exception as exc:
-        logger.exception(f"[{exchange_code}] Error in scrape_and_process_exchange")
+        error_msg = str(exc)
+        logger.error(f"[{exchange_code}] Pipeline failed: {error_msg[:500]}")
 
-        # Record failure in scrape log
+        # Update the existing scrape log entry with failure details
         session = get_sync_session()
         try:
-            _record_failure_log(exchange_code, session, str(exc))
-            session.commit()
+            if scrape_log_id:
+                log_entry = session.get(ScrapeLog, scrape_log_id)
+                if log_entry:
+                    log_entry.status = ScrapeStatus.FAILED
+                    log_entry.completed_at = datetime.utcnow()
+                    log_entry.error_message = error_msg[:2000]
+                    session.commit()
+            else:
+                _record_failure_log(exchange_code, session, error_msg)
+                session.commit()
         except Exception:
             logger.exception(f"[{exchange_code}] Failed to record error scrape log")
+            session.rollback()
         finally:
             session.close()
 

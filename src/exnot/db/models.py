@@ -135,6 +135,7 @@ class DeliveryStatus(str, enum.Enum):
 
 
 class ScrapeStatus(str, enum.Enum):
+    RUNNING = "RUNNING"
     SUCCESS = "SUCCESS"
     FAILED = "FAILED"
     NO_CHANGE = "NO_CHANGE"
@@ -410,6 +411,10 @@ class ScrapeLog(Base):
     document_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     has_changes: Mapped[bool] = mapped_column(Boolean, default=False)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    celery_task_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    total_cost_usd: Mapped[float | None] = mapped_column(Float, nullable=True)
+    total_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    num_turns: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     exchange: Mapped["Exchange"] = relationship(back_populates="scrape_logs")
 

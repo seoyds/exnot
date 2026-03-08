@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import os
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -111,7 +112,7 @@ After completing the pipeline, report a JSON summary:
 """
 
 
-async def run_exchange_pipeline(exchange_code: str, force: bool = False) -> list:
+async def run_exchange_pipeline(exchange_code: str, force: bool = False, scrape_log_id: str | None = None) -> list:
     """Run the full fee schedule pipeline for a single exchange.
 
     Creates the orchestrator agent with MCP tools and subagents, then
@@ -120,11 +121,17 @@ async def run_exchange_pipeline(exchange_code: str, force: bool = False) -> list
     Args:
         exchange_code: Exchange identifier (e.g., "CBOE_BZX", "NASDAQ_ISE").
         force: If True, re-process even if document hasn't changed.
+        scrape_log_id: Optional scrape log ID for persisting events.
 
     Returns:
         List of all messages from the agent conversation.
     """
+    from exnot.agents.streaming import broadcast_log_event
+
     settings = get_settings()
+
+    # Collect stderr for error reporting
+    stderr_lines: list[str] = []
 
     # Create MCP tools server
     tools_server = create_tools_server()
@@ -134,9 +141,10 @@ async def run_exchange_pipeline(exchange_code: str, force: bool = False) -> list
     validator = create_validator_agent()
     discovery = create_discovery_agent()
 
-    # Capture stderr for debugging
     def _log_stderr(line: str) -> None:
-        logger.warning("SDK stderr [%s]: %s", exchange_code, line.rstrip())
+        stripped = line.rstrip()
+        logger.warning("SDK stderr [%s]: %s", exchange_code, stripped)
+        stderr_lines.append(stripped)
 
     # Build agent options
     options = ClaudeAgentOptions(
@@ -166,64 +174,87 @@ async def run_exchange_pipeline(exchange_code: str, force: bool = False) -> list
 
     messages: list = []
 
-    logger.info("Starting pipeline for exchange=%s force=%s", exchange_code, force)
+    logger.info("Starting pipeline for exchange=%s force=%s log_id=%s", exchange_code, force, scrape_log_id)
+    broadcast_log_event(exchange_code, "info", f"Pipeline started (force={force})", scrape_log_id=scrape_log_id)
 
-    async for message in query(prompt=prompt_stream(), options=options):
-        messages.append(message)
+    # Unset CLAUDECODE env var to allow SDK subprocess to launch
+    # (prevents "cannot be launched inside another Claude Code session" error)
+    os.environ.pop("CLAUDECODE", None)
 
-        # Log based on message type
-        if isinstance(message, ResultMessage):
-            logger.info(
-                "Pipeline complete for %s: cost=$%.4f turns=%d stop_reason=%s",
-                exchange_code,
-                message.total_cost_usd or 0.0,
-                message.num_turns or 0,
-                message.stop_reason,
-            )
-        elif isinstance(message, AssistantMessage):
-            # Log assistant text content for debugging
-            if message.content:
-                for block in message.content:
-                    if hasattr(block, "text"):
-                        logger.debug("Assistant [%s]: %s", exchange_code, block.text[:200])
-        elif isinstance(message, SystemMessage):
-            logger.debug("System [%s]: subtype=%s", exchange_code, message.subtype)
-        elif isinstance(message, UserMessage):
-            logger.debug("User [%s]: tool result received", exchange_code)
+    try:
+        cli_path = None
+        try:
+            import claude_agent_sdk
+            bundled = __import__("pathlib").Path(claude_agent_sdk.__file__).parent / "_bundled" / "claude"
+            cli_path = str(bundled) if bundled.exists() else "not found"
+        except Exception:
+            pass
+        logger.info("Using bundled Claude Code CLI: %s", cli_path)
 
-        # Broadcast to dashboard if available (SSE streaming, implemented separately)
-        await _broadcast_message(exchange_code, message)
+        async for message in query(prompt=prompt_stream(), options=options):
+            messages.append(message)
+
+            # Log based on message type
+            if isinstance(message, ResultMessage):
+                logger.info(
+                    "Pipeline complete for %s: cost=$%.4f turns=%d stop_reason=%s is_error=%s",
+                    exchange_code,
+                    message.total_cost_usd or 0.0,
+                    message.num_turns or 0,
+                    message.stop_reason,
+                    message.is_error,
+                )
+                if message.is_error:
+                    broadcast_log_event(
+                        exchange_code, "error",
+                        f"Pipeline ended with error: {message.result[:500] if message.result else 'unknown'}",
+                        scrape_log_id=scrape_log_id,
+                    )
+                else:
+                    broadcast_log_event(
+                        exchange_code, "info",
+                        f"Pipeline complete: cost=${message.total_cost_usd or 0:.4f}, turns={message.num_turns or 0}",
+                        scrape_log_id=scrape_log_id,
+                    )
+            elif isinstance(message, AssistantMessage):
+                if message.content:
+                    for block in message.content:
+                        if hasattr(block, "text"):
+                            logger.debug("Assistant [%s]: %s", exchange_code, block.text[:200])
+            elif isinstance(message, SystemMessage):
+                logger.debug("System [%s]: subtype=%s", exchange_code, message.subtype)
+            elif isinstance(message, UserMessage):
+                logger.debug("User [%s]: tool result received", exchange_code)
+
+            # Broadcast to dashboard via Redis pub/sub
+            await _broadcast_message(exchange_code, message, scrape_log_id=scrape_log_id)
+
+    except Exception as exc:
+        # Enrich the error with stderr output
+        stderr_output = "\n".join(stderr_lines[-50:]) if stderr_lines else "(no stderr captured)"
+        enriched_msg = f"{exc}\nStderr output:\n{stderr_output}"
+        logger.error("Pipeline failed for %s: %s", exchange_code, enriched_msg)
+        broadcast_log_event(exchange_code, "error", f"Pipeline failed: {enriched_msg[:1000]}", scrape_log_id=scrape_log_id)
+        raise RuntimeError(enriched_msg) from exc
 
     return messages
 
 
-async def _broadcast_message(exchange_code: str, message: object) -> None:
-    """Broadcast a pipeline message to connected dashboard clients via SSE.
-
-    Args:
-        exchange_code: Exchange being processed.
-        message: Message from the agent conversation.
-    """
+async def _broadcast_message(exchange_code: str, message: object, scrape_log_id: str | None = None) -> None:
+    """Broadcast a pipeline message to connected dashboard clients via Redis pub/sub."""
     try:
         from exnot.agents.streaming import broadcast_to_dashboard
 
-        await broadcast_to_dashboard(exchange_code, message)
+        await broadcast_to_dashboard(exchange_code, message, scrape_log_id=scrape_log_id)
     except ImportError:
         pass
     except Exception:
         logger.debug("Failed to broadcast message for %s", exchange_code, exc_info=True)
 
 
-def run_exchange_pipeline_sync(exchange_code: str, force: bool = False) -> list:
+def run_exchange_pipeline_sync(exchange_code: str, force: bool = False, scrape_log_id: str | None = None) -> list:
     """Synchronous wrapper for run_exchange_pipeline.
 
     Intended for use in Celery tasks which require a sync entry point.
-
-    Args:
-        exchange_code: Exchange identifier (e.g., "CBOE_BZX", "NASDAQ_ISE").
-        force: If True, re-process even if document hasn't changed.
-
-    Returns:
-        List of all messages from the agent conversation.
     """
-    return asyncio.run(run_exchange_pipeline(exchange_code, force=force))
+    return asyncio.run(run_exchange_pipeline(exchange_code, force=force, scrape_log_id=scrape_log_id))

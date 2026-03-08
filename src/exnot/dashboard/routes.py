@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Form, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from jose import JWTError, jwt
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from exnot.config import get_settings
@@ -715,6 +716,131 @@ async def monitor_page(
     )
 
 
+@router.get("/dashboard/monitor/logs/{log_id}", response_class=HTMLResponse)
+async def get_pipeline_logs(
+    log_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Fetch stored pipeline events for a completed run."""
+    user = await _get_current_user_from_cookie(request, db)
+    if not user or not user.is_admin:
+        return HTMLResponse('<p class="text-red-600 text-xs">Unauthorized</p>', status_code=403)
+
+    from exnot.agents.streaming import get_stored_events
+
+    events = get_stored_events(log_id)
+
+    if not events:
+        return HTMLResponse('<p class="text-slate-400 dark:text-slate-500 italic text-xs">No stored events for this run (events expire after 24 hours).</p>')
+
+    import html
+
+    lines = []
+    for event in events:
+        etype = event.get("type", "unknown")
+        if etype == "assistant":
+            for block in event.get("blocks", []):
+                btype = block.get("type", "")
+                if btype == "tool_call":
+                    name = html.escape(block.get("name", ""))
+                    model = html.escape(event.get("model", "") or "")
+                    sub = " (subagent)" if event.get("is_subagent") else ""
+                    model_span = f' <span class="text-slate-400">[{model}]</span>' if model else ""
+                    lines.append(f'<div class="py-0.5 border-b border-slate-100 dark:border-slate-800">'
+                                 f'<span class="text-purple-600 dark:text-purple-400 font-semibold">TOOL</span> '
+                                 f'{name}{sub}{model_span}'
+                                 f'</div>')
+                    inp = html.escape(block.get("input", ""))
+                    if inp:
+                        lines.append(f'<details class="ml-4 mb-1"><summary class="cursor-pointer text-slate-500 dark:text-slate-400 text-xs">Input</summary>'
+                                     f'<pre class="mt-1 p-2 bg-slate-100 dark:bg-slate-800 rounded text-xs overflow-x-auto max-h-48 overflow-y-auto">{inp}</pre></details>')
+                elif btype == "text":
+                    text = html.escape(block.get("text", "")[:500])
+                    lines.append(f'<div class="py-0.5 border-b border-slate-100 dark:border-slate-800">'
+                                 f'<span class="text-blue-600 dark:text-blue-400 font-semibold">TEXT</span> {text}</div>')
+                elif btype == "reasoning":
+                    text = html.escape(block.get("text", "")[:300])
+                    lines.append(f'<div class="py-0.5 border-b border-slate-100 dark:border-slate-800">'
+                                 f'<span class="text-amber-600 dark:text-amber-400 font-semibold">THINK</span> '
+                                 f'<span class="text-slate-500 dark:text-slate-400">{text}</span></div>')
+        elif etype == "result":
+            is_error = event.get("is_error", False)
+            badge = '<span class="text-red-600 dark:text-red-400 font-bold">RESULT (ERROR)</span>' if is_error else '<span class="text-green-600 dark:text-green-400 font-bold">RESULT</span>'
+            cost = float(event.get("total_cost_usd", 0) or 0)
+            lines.append(f'<div class="py-0.5 border-b border-slate-100 dark:border-slate-800">'
+                         f'{badge} stop={html.escape(str(event.get("stop_reason", "?")))} '
+                         f'cost=${cost:.4f} turns={event.get("num_turns", 0)}</div>')
+            result_text = event.get("result")
+            if result_text:
+                lines.append(f'<details class="ml-4 mb-1"><summary class="cursor-pointer text-slate-500 dark:text-slate-400 text-xs">Result output</summary>'
+                             f'<pre class="mt-1 p-2 bg-slate-100 dark:bg-slate-800 rounded text-xs overflow-x-auto max-h-48 overflow-y-auto">{html.escape(result_text)}</pre></details>')
+        elif etype == "log":
+            level = event.get("level", "info")
+            color_map = {"info": "text-blue-600 dark:text-blue-400", "error": "text-red-600 dark:text-red-400", "warn": "text-amber-600 dark:text-amber-400"}
+            color = color_map.get(level, "text-slate-600 dark:text-slate-400")
+            lines.append(f'<div class="py-0.5 border-b border-slate-100 dark:border-slate-800">'
+                         f'<span class="{color} font-semibold">{html.escape(level.upper())}</span> '
+                         f'{html.escape(event.get("message", ""))}</div>')
+        elif etype == "system":
+            lines.append(f'<div class="py-0.5 border-b border-slate-100 dark:border-slate-800">'
+                         f'<span class="text-slate-500 dark:text-slate-400 font-semibold">SYS</span> '
+                         f'{html.escape(event.get("raw", "")[:300])}</div>')
+
+    return HTMLResponse(
+        f'<div class="text-xs text-slate-500 dark:text-slate-400 mb-2">{len(events)} events stored</div>'
+        + "\n".join(lines)
+    )
+
+
+@router.post("/dashboard/monitor/kill/{log_id}", response_class=HTMLResponse)
+async def kill_pipeline(
+    log_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Kill a running pipeline by revoking its Celery task."""
+    user = await _get_current_user_from_cookie(request, db)
+    if not user or not user.is_admin:
+        return HTMLResponse('<span class="text-red-600 text-xs">Unauthorized</span>', status_code=403)
+
+    from exnot.db.models import ScrapeLog, ScrapeStatus
+
+    result = await db.execute(select(ScrapeLog).where(ScrapeLog.id == log_id))
+    log_entry = result.scalar_one_or_none()
+
+    if not log_entry:
+        return HTMLResponse('<span class="text-red-600 text-xs">Not found</span>', status_code=404)
+
+    if log_entry.status != ScrapeStatus.RUNNING:
+        return HTMLResponse('<span class="text-slate-500 text-xs">Not running</span>')
+
+    # Revoke the Celery task
+    killed = False
+    if log_entry.celery_task_id:
+        try:
+            from exnot.workers.celery_app import celery_app
+
+            celery_app.control.revoke(log_entry.celery_task_id, terminate=True, signal="SIGTERM")
+            killed = True
+        except Exception:
+            pass
+
+    # Update the scrape log
+    from datetime import datetime
+
+    log_entry.status = ScrapeStatus.FAILED
+    log_entry.completed_at = datetime.utcnow()
+    log_entry.error_message = "Manually killed by admin" + ("" if killed else " (no task ID, marked only)")
+    await db.commit()
+
+    return HTMLResponse(
+        '<span class="inline-flex items-center rounded-full bg-red-100 dark:bg-red-900/50 px-2 py-0.5 text-xs font-medium text-red-800 dark:text-red-300">'
+        '<span class="mr-1 h-1.5 w-1.5 rounded-full bg-red-500 inline-block"></span>'
+        'KILLED</span>'
+    )
+
+
 # ---------------------------------------------------------------------------
 # Admin panel
 # ---------------------------------------------------------------------------
@@ -963,6 +1089,147 @@ async def claude_auth_upload(
         url="/dashboard/admin/claude-auth?message=Credentials+uploaded+successfully",
         status_code=303,
     )
+
+
+# ---------------------------------------------------------------------------
+# Claude Agent SDK Test
+# ---------------------------------------------------------------------------
+
+
+def _get_sdk_info() -> dict:
+    """Gather basic SDK info for the test page."""
+    info = {"sdk_version": None, "cli_path": None, "has_auth": False}
+    try:
+        import claude_agent_sdk
+
+        info["sdk_version"] = getattr(claude_agent_sdk, "__version__", "installed")
+        # Find bundled CLI path
+        from pathlib import Path
+
+        bundled = Path(claude_agent_sdk.__file__).parent / "_bundled" / "claude"
+        info["cli_path"] = str(bundled) if bundled.exists() else "bundled CLI not found"
+    except ImportError:
+        pass
+
+    # Check auth
+    from pathlib import Path
+
+    claude_json = Path.home() / ".claude.json"
+    credentials = Path.home() / ".claude" / ".credentials.json"
+    info["has_auth"] = claude_json.exists() or credentials.exists()
+    return info
+
+
+@router.get("/dashboard/admin/sdk-test", response_class=HTMLResponse)
+async def sdk_test_page(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Claude Agent SDK test page."""
+    user = await _get_current_user_from_cookie(request, db)
+    if not user or not user.is_admin:
+        return RedirectResponse(
+            url="/dashboard/login?error=Admin+login+required",
+            status_code=303,
+        )
+
+    sdk_info = _get_sdk_info()
+    return templates.TemplateResponse(
+        "sdk_test.html",
+        {
+            "request": request,
+            "user": user,
+            "sdk_info": sdk_info,
+        },
+    )
+
+
+@router.post("/dashboard/admin/sdk-test/run", response_class=HTMLResponse)
+async def sdk_test_run(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Run a simple SDK test and return the result as HTML fragment."""
+    user = await _get_current_user_from_cookie(request, db)
+    if not user or not user.is_admin:
+        return HTMLResponse('<p class="text-red-600">Admin login required.</p>', status_code=403)
+
+    import asyncio
+    import html
+    import os
+    import time
+
+    lines: list[str] = []
+    start = time.time()
+
+    try:
+        # Prevent nested session error
+        os.environ.pop("CLAUDECODE", None)
+
+        from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, query
+
+        options = ClaudeAgentOptions(model="haiku")
+
+        result_text = ""
+        cost = None
+        turns = None
+
+        async for message in query(prompt="Say hello in one sentence.", options=options):
+            msg_type = type(message).__name__
+            if isinstance(message, ResultMessage):
+                result_text = message.result or ""
+                cost = message.total_cost_usd
+                turns = message.num_turns
+                lines.append(f"[ResultMessage] stop_reason={message.stop_reason}")
+            else:
+                lines.append(f"[{msg_type}] received")
+
+        elapsed = time.time() - start
+
+        output = f'<div class="space-y-3">\n'
+        output += f'  <div class="flex items-center gap-2">\n'
+        output += f'    <span class="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800">SUCCESS</span>\n'
+        output += f'    <span class="text-slate-500 text-xs">{elapsed:.2f}s</span>\n'
+        output += f'  </div>\n'
+        output += f'  <div class="bg-white border border-slate-200 rounded p-3">\n'
+        output += f'    <p class="text-slate-800 font-medium">Response:</p>\n'
+        output += f'    <p class="text-slate-700 mt-1">{html.escape(result_text)}</p>\n'
+        output += f'  </div>\n'
+        output += f'  <dl class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">\n'
+        output += f'    <div><dt class="text-slate-500">Cost</dt><dd class="font-mono">${cost:.6f}</dd></div>\n' if cost is not None else ''
+        output += f'    <div><dt class="text-slate-500">Turns</dt><dd class="font-mono">{turns}</dd></div>\n' if turns is not None else ''
+        output += f'    <div><dt class="text-slate-500">Duration</dt><dd class="font-mono">{elapsed:.2f}s</dd></div>\n'
+        output += f'    <div><dt class="text-slate-500">Messages</dt><dd class="font-mono">{len(lines)}</dd></div>\n'
+        output += f'  </dl>\n'
+        output += f'  <details class="text-xs">\n'
+        output += f'    <summary class="cursor-pointer text-slate-500 hover:text-slate-700">Raw messages</summary>\n'
+        output += f'    <pre class="mt-2 bg-slate-100 p-2 rounded overflow-x-auto">{html.escape(chr(10).join(lines))}</pre>\n'
+        output += f'  </details>\n'
+        output += f'</div>'
+
+        return HTMLResponse(output)
+
+    except Exception as e:
+        elapsed = time.time() - start
+        import html as html_mod
+        import traceback
+
+        tb = traceback.format_exc()
+        output = f'<div class="space-y-3">\n'
+        output += f'  <div class="flex items-center gap-2">\n'
+        output += f'    <span class="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-800">FAILED</span>\n'
+        output += f'    <span class="text-slate-500 text-xs">{elapsed:.2f}s</span>\n'
+        output += f'  </div>\n'
+        output += f'  <div class="bg-red-50 border border-red-200 rounded p-3">\n'
+        output += f'    <p class="text-red-800 font-medium">{html_mod.escape(type(e).__name__)}: {html_mod.escape(str(e))}</p>\n'
+        output += f'  </div>\n'
+        output += f'  <details class="text-xs">\n'
+        output += f'    <summary class="cursor-pointer text-slate-500 hover:text-slate-700">Full traceback</summary>\n'
+        output += f'    <pre class="mt-2 bg-red-50 p-2 rounded overflow-x-auto text-red-700">{html_mod.escape(tb)}</pre>\n'
+        output += f'  </details>\n'
+        output += f'</div>'
+
+        return HTMLResponse(output)
 
 
 # ---------------------------------------------------------------------------
